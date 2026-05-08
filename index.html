@@ -399,7 +399,13 @@ async function loadData() {
 }
 
 // ── PROCESS DATA ──────────────────────────────────────────────────
-function n(v) { return parseFloat(v) || 0; }
+function n(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  const s = String(v).trim();
+  const cleaned = s.replace(/\./g, '').replace(',', '.');
+  const result = parseFloat(cleaned);
+  return isNaN(result) ? 0 : result;
+}
 
 function processDashboard(lanchasRaw, descargaRaw) {
 
