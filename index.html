@@ -233,7 +233,7 @@ main{padding:24px 32px;max-width:1200px;margin:0 auto;}
     <div class="card" style="margin-bottom:32px;">
       <div class="card-title">Ficha por lancha</div>
       <table class="data-table">
-        <thead><tr><th>Lancha</th><th>Lotes</th><th>Kg guía</th><th>Kg planta</th><th>Rendimiento</th><th>Calificación</th></tr></thead>
+        <thead><tr><th>Lancha</th><th>Lotes</th><th>Kg recepcionados</th><th>Piezas</th><th>Rechazados</th><th>Sobre 1 ppm Hg</th><th>Calificación</th></tr></thead>
         <tbody id="tbLanchas"></tbody>
       </table>
     </div>
@@ -250,6 +250,8 @@ main{padding:24px 32px;max-width:1200px;margin:0 auto;}
     <div class="filter-row">
       <span class="filter-label">Semana:</span>
       <select class="filter-select" id="filtroFrescoSem" onchange="renderFresco()"><option value="todas">Todas</option></select>
+      <span class="filter-label" style="margin-left:8px">Cliente:</span>
+      <select class="filter-select" id="filtroFrescoCliente" onchange="renderFresco()"><option value="todos">Todos</option></select>
     </div>
 
     <div class="kpi-row-4">
@@ -532,29 +534,51 @@ function renderHg() {
   const lanchas = DB.lanchas;
   const desc    = DB.descarga;
 
-  // Agrupar por lancha
-  const lanchaMap = {};
+  // Mapa lote → lancha (desde hoja LANCHAS)
+  const loteToLancha = {};
+  const loteToSem    = {};
+  const loteToCol    = {}; // calificacion
   lanchas.forEach(r => {
-    const nm = r['LANCHA'].trim();
-    if (!lanchaMap[nm]) lanchaMap[nm] = { lotes:0, kg_g:0, kg_p:0, cal:'' };
-    lanchaMap[nm].lotes++;
-    lanchaMap[nm].kg_g += n(r['KG_GUIA']);
-    lanchaMap[nm].kg_p += n(r['KG  PLANTA'] || r['KG_PLANTA'] || 0);
-    if (r['CALIFICACION']) lanchaMap[nm].cal = r['CALIFICACION'].trim();
+    const lote = String(n(r['LOTE'] || r['LOTE_ASOCIADO'] || r['LOTE  ASOCIADO'] || 0));
+    const nm   = (r['LANCHA']||'').trim();
+    const sem  = n(r['Semana']||r['SEMANA']||0);
+    const cal  = (r['CALIFICACION']||'').trim();
+    if (lote && nm) { loteToLancha[lote]=nm; loteToSem[lote]=sem; loteToCol[lote]=cal; }
   });
-  const lanchaArr = Object.entries(lanchaMap).map(([nm,d])=>({nm,...d,rend:d.kg_p>0?d.kg_p/d.kg_g*100:0})).sort((a,b)=>b.kg_g-a.kg_g);
 
-  // KPIs
-  const totKg = lanchaArr.reduce((s,l)=>s+l.kg_g,0);
+  // Agrupar DESCARGA por lancha (via lote)
+  const lanchaMap = {};
+  desc.forEach(r => {
+    const lote  = String(n(r['LOTE_ASOCIADO']||0));
+    const nm    = loteToLancha[lote] || ('Lote '+lote);
+    const sem   = loteToSem[lote]   || 0;
+    if (!lanchaMap[nm]) lanchaMap[nm] = { lotes:new Set(), kg:0, rechazos:0, sobreHg:0, total:0, sem, cal:loteToCol[lote]||'' };
+    lanchaMap[nm].lotes.add(lote);
+    lanchaMap[nm].kg      += n(r['PESO_PLANTA']||0);
+    lanchaMap[nm].total++;
+    if ((r['A/R']||'').trim()==='RECHAZO') lanchaMap[nm].rechazos++;
+    if (n(r['PPM Hg'])>=1.0) lanchaMap[nm].sobreHg++;
+  });
+
+  const lanchaArr = Object.entries(lanchaMap)
+    .map(([nm,d])=>({nm, lotes:d.lotes.size, kg:d.kg, rechazos:d.rechazos, sobreHg:d.sobreHg, total:d.total, cal:d.cal,
+      rechPct: d.total>0?(d.rechazos/d.total*100):0,
+      hgPct:   d.total>0?(d.sobreHg/d.total*100):0
+    }))
+    .sort((a,b)=>b.kg-a.kg);
+
+  // KPIs globales
+  const totKg    = lanchaArr.reduce((s,l)=>s+l.kg,0);
+  const totPiezas= desc.length;
   document.getElementById('kpiKg').innerHTML = fmt(totKg)+'<span> kg</span>';
   document.getElementById('kpiKgSub').textContent = `${lanchas.length} lotes · ${lanchaArr.length} lanchas`;
 
   const hgVals  = desc.map(r=>n(r['PPM Hg']));
   const total   = hgVals.length;
-  const hgOk    = hgVals.filter(v=>v<1.0).length;
+  const hgOk    = hgVals.filter(v=>v>0&&v<1.0).length;
   const hgMid   = hgVals.filter(v=>v>=1.0&&v<1.2).length;
   const hgRej   = hgVals.filter(v=>v>=1.2).length;
-  const rechazos= desc.filter(r=>r['A/R']==='RECHAZO').length;
+  const rechazos= desc.filter(r=>(r['A/R']||'').trim()==='RECHAZO').length;
   const rechPct = total>0?(rechazos/total*100):0;
 
   document.getElementById('kpiHg').innerHTML = rechPct.toFixed(1)+'<span>%</span>';
@@ -568,20 +592,15 @@ function renderHg() {
   document.getElementById('hgBarRej').style.width = rejPct+'%';
   document.getElementById('hgBarLabel').textContent = okPct+'% aceptado';
 
-  // Hg por semana
-  const loteToSem = {};
-  lanchas.forEach(r => {
-    const lote = r['LOTE  ASOCIADO']||r['LOTE_ASOCIADO']||r['LOTE'];
-    const sem  = r['Semana']||r['SEMANA'];
-    if (lote&&sem) loteToSem[String(n(lote))]=n(sem);
-  });
+  // Hg por semana desde DESCARGA × loteToSem
   const semMap = {};
   desc.forEach(r => {
-    const sem = loteToSem[String(n(r['LOTE_ASOCIADO']||r['LOTE  ASOCIADO']||0))];
+    const lote = String(n(r['LOTE_ASOCIADO']||0));
+    const sem  = loteToSem[lote];
     if (!sem) return;
-    if (!semMap[sem]) semMap[sem]={total:0,rechazos:0};
+    if (!semMap[sem]) semMap[sem]={total:0, rechazos:0};
     semMap[sem].total++;
-    if (r['A/R']==='RECHAZO') semMap[sem].rechazos++;
+    if ((r['A/R']||'').trim()==='RECHAZO') semMap[sem].rechazos++;
   });
   const semanas   = Object.keys(semMap).map(Number).sort((a,b)=>a-b);
   const semRech   = semanas.map(s=>semMap[s].total>0?+(semMap[s].rechazos/semMap[s].total*100).toFixed(1):null);
@@ -612,19 +631,20 @@ function renderHg() {
     options:{ responsive:true, maintainAspectRatio:false, cutout:'68%', plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} piezas (${(ctx.raw/total*100).toFixed(1)}%)`}} } }
   });
 
-  // Tabla lanchas
+  // Tabla lanchas — ahora con datos reales de DESCARGA
   const tbody = document.getElementById('tbLanchas');
   tbody.innerHTML='';
   lanchaArr.forEach(l=>{
-    const pct=Math.max(0,Math.min(100,(l.rend-97)/5*100)).toFixed(0);
-    const col=l.rend<99?C.danger:l.rend<99.8?C.warn:C.teal;
-    const calCls={'BUENO':'color:#00d4a8','REGULAR':'color:#f5a623','MALO':'color:#e84040'}[l.cal]||'color:var(--text3)';
+    const rechCol = l.rechPct>20?C.danger:l.rechPct>15?C.warn:C.teal;
+    const hgCol   = l.hgPct>20?C.danger:l.hgPct>15?C.warn:C.teal;
+    const calCls  = {'BUENO':'color:#00d4a8','REGULAR':'color:#f5a623','MALO':'color:#e84040'}[l.cal]||'color:var(--text3)';
     tbody.innerHTML+=`<tr>
       <td style="font-weight:500">${l.nm}</td>
       <td class="mono" style="color:var(--text2)">${l.lotes}</td>
-      <td class="mono">${fmt(l.kg_g)}</td>
-      <td class="mono">${l.kg_p>0?fmt(l.kg_p):'—'}</td>
-      <td><div class="prog-wrap"><span class="mono" style="font-size:11px;min-width:44px">${l.rend>0?l.rend.toFixed(1)+'%':'—'}</span><div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:${col}"></div></div></div></td>
+      <td class="mono">${fmt(l.kg)}</td>
+      <td class="mono">${l.total}</td>
+      <td class="mono" style="color:${rechCol}">${l.rechazos} (${l.rechPct.toFixed(1)}%)</td>
+      <td class="mono" style="color:${hgCol}">${l.sobreHg} (${l.hgPct.toFixed(1)}%)</td>
       <td style="font-size:11px;font-family:var(--mono);${calCls}">${l.cal||'—'}</td>
     </tr>`;
   });
@@ -634,22 +654,30 @@ function renderHg() {
 // PANEL FRESCO
 // ════════════════════════════════════════════════════════════════
 function populateFiltrosFresco() {
-  const semanas = [...new Set(DB.fresco.map(r=>r['SEMANA']).filter(Boolean))].sort((a,b)=>n(a)-n(b));
-  const sel = document.getElementById('filtroFrescoSem');
-  sel.innerHTML = '<option value="todas">Todas las semanas</option>';
-  semanas.forEach(s=>{ sel.innerHTML+=`<option value="${s}">Semana ${s}</option>`; });
+  const semanas  = [...new Set(DB.fresco.map(r=>r['SEMANA']).filter(Boolean))].sort((a,b)=>n(a)-n(b));
+  const clientes = [...new Set(DB.fresco.map(r=>r['CLIENTE'].trim()).filter(Boolean))].sort();
+  const selS = document.getElementById('filtroFrescoSem');
+  selS.innerHTML = '<option value="todas">Todas las semanas</option>';
+  semanas.forEach(s=>{ selS.innerHTML+=`<option value="${s}">Semana ${s}</option>`; });
+  const selC = document.getElementById('filtroFrescoCliente');
+  selC.innerHTML = '<option value="todos">Todos los clientes</option>';
+  clientes.forEach(c=>{ selC.innerHTML+=`<option value="${c}">${c}</option>`; });
 }
 
 function getFrescoFiltered() {
   const sem = document.getElementById('filtroFrescoSem').value;
-  return sem==='todas' ? DB.fresco : DB.fresco.filter(r=>String(r['SEMANA'])===String(sem));
+  const cli = document.getElementById('filtroFrescoCliente').value;
+  return DB.fresco.filter(r =>
+    (sem==='todas' || String(r['SEMANA'])===String(sem)) &&
+    (cli==='todos' || r['CLIENTE'].trim()===cli)
+  );
 }
 
 function renderFresco() {
   const data = getFrescoFiltered();
   if (!data.length) return;
 
-  // Helper para leer % como decimal (ej: "66,62%" → 0.6662)
+  // Leer % como decimal — "66,62%" → 0.6662
   function pct(v) {
     if (!v) return 0;
     const s = String(v).trim().replace('%','').replace(',','.');
@@ -657,50 +685,54 @@ function renderFresco() {
     return isNaN(r) ? 0 : r / 100;
   }
 
-  // Nombres de columna reales (con salto de línea tal como vienen de Sheets)
-  // parseSheet ya hace trim() en headers pero no elimina \n — lo manejamos con ambas variantes
   const getKgCliente = r => n(r['KG\nCLIENTE'] || r['KG CLIENTE'] || r['KG_CLIENTE'] || 0);
-  const getMP       = r => n(r['MATERIA\nPRIMA'] || r['MATERIA PRIMA'] || r['MATERIA_PRIMA'] || 0);
-  const getESSpct   = r => pct(r['ESS'] || 0);
-  const getExppct   = r => pct(r['EXPORTACIÓN'] || r['EXPORTACION'] || 0);
-  const getTotpct   = r => pct(r['TOTAL'] || 0);
+  const getMP        = r => n(r['MATERIA\nPRIMA'] || r['MATERIA PRIMA'] || r['MATERIA_PRIMA'] || 0);
+  const getESSpct    = r => pct(r['ESS'] || 0);
+  const getExppct    = r => pct(r['EXPORTACIÓN'] || r['EXPORTACION'] || 0);
+  const getTotpct    = r => pct(r['TOTAL'] || 0);
+
+  // ESS: solo ESSELUNGA
+  // Exportación: todos excepto CENCOSUD (incluye ESSELUNGA)
+  // Total: todos
 
   const clienteMap = {};
   data.forEach(r=>{
-    const c = r['CLIENTE'].trim();
+    const c   = r['CLIENTE'].trim();
+    const cUp = c.toUpperCase();
     if (!clienteMap[c]) clienteMap[c]={procesos:0, mp:0, kgEss:0, kgExp:0, kgTot:0};
     clienteMap[c].procesos++;
     const mp  = getMP(r);
     const kgC = getKgCliente(r);
-    // Si TOTAL es porcentaje, calcular kg = MP × %
-    // Si TOTAL es > 1, asumir que ya es kg directamente
-    const totRaw = r['TOTAL'] || '';
+    const totRaw   = r['TOTAL'] || '';
     const isTotPct = String(totRaw).includes('%');
+    const kgTot    = kgC > 0 ? kgC : (isTotPct ? mp * getTotpct(r) : n(totRaw));
+
     clienteMap[c].mp    += mp;
-    clienteMap[c].kgEss += mp * getESSpct(r);
-    clienteMap[c].kgExp += mp * getExppct(r);
-    // Para kg total: usar KG CLIENTE si existe y es razonable, si no calcular desde %
-    if (kgC > 0) {
-      clienteMap[c].kgTot += kgC;
-    } else if (isTotPct) {
-      clienteMap[c].kgTot += mp * getTotpct(r);
-    } else {
-      clienteMap[c].kgTot += n(totRaw);
-    }
+    clienteMap[c].kgTot += kgTot;
+    if (cUp.includes('ESSELUNGA'))               clienteMap[c].kgEss += mp * getESSpct(r);
+    if (!cUp.includes('CENCOSUD'))               clienteMap[c].kgExp += mp * getExppct(r);
   });
 
   const clientes = Object.entries(clienteMap).sort((a,b)=>b[1].kgTot-a[1].kgTot);
   const totKg  = clientes.reduce((s,[,d])=>s+d.kgTot,0);
   const totMp  = clientes.reduce((s,[,d])=>s+d.mp,0);
-  const totEss = clientes.reduce((s,[,d])=>s+d.kgEss,0);
-  const totExp = clientes.reduce((s,[,d])=>s+d.kgExp,0);
   const nProc  = clientes.reduce((s,[,d])=>s+d.procesos,0);
 
-  document.getElementById('fKpiKg').innerHTML=fmt(totKg)+'<span> kg</span>';
-  document.getElementById('fKpiSub').textContent=`${nProc} procesos · ${clientes.length} clientes`;
-  document.getElementById('fKpiESS').innerHTML=(totMp>0?(totEss/totMp*100).toFixed(1):'—')+'<span>%</span>';
-  document.getElementById('fKpiExp').innerHTML=(totMp>0?(totExp/totMp*100).toFixed(1):'—')+'<span>%</span>';
-  document.getElementById('fKpiTot').innerHTML=(totMp>0?(totKg/totMp*100).toFixed(1):'—')+'<span>%</span>';
+  // Kg ESS = solo MP de ESSELUNGA × % ESS
+  const essRows = data.filter(r=>r['CLIENTE'].trim().toUpperCase().includes('ESSELUNGA'));
+  const mpEss   = essRows.reduce((a,r)=>a+getMP(r),0);
+  const kgEss   = essRows.reduce((a,r)=>a+getMP(r)*getESSpct(r),0);
+
+  // Kg Exp = todos excepto CENCOSUD
+  const expRows = data.filter(r=>!r['CLIENTE'].trim().toUpperCase().includes('CENCOSUD'));
+  const mpExp   = expRows.reduce((a,r)=>a+getMP(r),0);
+  const kgExp   = expRows.reduce((a,r)=>a+getMP(r)*getExppct(r),0);
+
+  document.getElementById('fKpiKg').innerHTML  = fmt(totKg)+'<span> kg</span>';
+  document.getElementById('fKpiSub').textContent= `${nProc} procesos · ${clientes.length} clientes`;
+  document.getElementById('fKpiESS').innerHTML  = (mpEss>0?(kgEss/mpEss*100).toFixed(1):'—')+'<span>%</span>';
+  document.getElementById('fKpiExp').innerHTML  = (mpExp>0?(kgExp/mpExp*100).toFixed(1):'—')+'<span>%</span>';
+  document.getElementById('fKpiTot').innerHTML  = (totMp>0?(totKg/totMp*100).toFixed(1):'—')+'<span>%</span>';
 
   // Chart: Kg por cliente
   destroyChart('fCClienteKg');
@@ -710,19 +742,23 @@ function renderFresco() {
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.raw.toLocaleString('es-CL')+' kg'}}}, scales:{ x:{grid:{color:C.grid},ticks:{color:C.txt,callback:v=>(v/1000).toFixed(0)+'k'}}, y:{grid:{color:'transparent'},ticks:{color:C.txt,font:{size:11}}} } }
   });
 
-  // Rendimiento por semana (siempre datos globales)
+  // Rendimiento por semana — siempre sobre datos globales (no filtrado por cliente)
   const semanas=[...new Set(DB.fresco.map(r=>r['SEMANA']).filter(Boolean))].sort((a,b)=>n(a)-n(b));
   const semLabels=semanas.map(s=>'Sem '+s);
 
   const mkRendSem=(tipo)=>semanas.map(s=>{
-    const rows=DB.fresco.filter(r=>String(r['SEMANA'])===String(s));
-    const mp=rows.reduce((a,r)=>a+getMP(r),0);
-    let kg=0;
-    if(tipo==='ESS')  kg=rows.reduce((a,r)=>a+mp*getESSpct(r)/rows.length*rows.length,0);
-    if(tipo==='EXP')  kg=rows.reduce((a,r)=>a+getMP(r)*getExppct(r),0);
-    if(tipo==='TOT')  kg=rows.reduce((a,r)=>{ const kgC=getKgCliente(r); return a+(kgC>0?kgC:getMP(r)*getTotpct(r)); },0);
-    if(tipo==='ESS')  kg=rows.reduce((a,r)=>a+getMP(r)*getESSpct(r),0);
-    return mp>0?+(kg/mp*100).toFixed(1):null;
+    const rows = DB.fresco.filter(r=>String(r['SEMANA'])===String(s));
+    let kgNum=0, mpDen=0;
+    rows.forEach(r=>{
+      const c   = r['CLIENTE'].trim().toUpperCase();
+      const mp  = getMP(r);
+      const kgC = getKgCliente(r);
+      const kgTot = kgC>0 ? kgC : getMP(r)*getTotpct(r);
+      if (tipo==='ESS' && c.includes('ESSELUNGA')) { kgNum+=mp*getESSpct(r); mpDen+=mp; }
+      if (tipo==='EXP' && !c.includes('CENCOSUD')) { kgNum+=mp*getExppct(r); mpDen+=mp; }
+      if (tipo==='TOT')                             { kgNum+=kgTot;           mpDen+=mp; }
+    });
+    return mpDen>0?+(kgNum/mpDen*100).toFixed(1):null;
   });
 
   destroyChart('fCRendSem');
