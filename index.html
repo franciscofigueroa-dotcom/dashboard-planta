@@ -806,7 +806,7 @@ function renderFresco() {
     </tr>`;
   });
   const rG=totMp>0?(totKg/totMp*100).toFixed(1):'—';
-  tfoot.innerHTML=`<tr><td>Total</td><td class="mono">${nProc}</td><td class="mono">${fmt(totMp)}</td><td class="mono">${fmt(totEss)}</td><td class="mono">${fmt(totExp)}</td><td class="mono">${fmt(totKg)}</td><td class="mono">${rG}${rG!=='—'?'%':''}</td></tr>`;
+  tfoot.innerHTML=`<tr><td>Total</td><td class="mono">${nProc}</td><td class="mono">${fmt(totMp)}</td><td class="mono">${fmt(kgEss)}</td><td class="mono">${fmt(kgExp)}</td><td class="mono">${fmt(totKg)}</td><td class="mono">${rG}${rG!=='—'?'%':''}</td></tr>`;
 }
 
 // ════════════════════════════════════════════════════════════════
