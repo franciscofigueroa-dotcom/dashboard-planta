@@ -386,8 +386,28 @@ let currentTab = 'hg';
 // ── UTILS ─────────────────────────────────────────────────────────
 function n(v) {
   if (v === null || v === undefined || v === '') return 0;
-  const cleaned = String(v).trim().replace(/\./g,'').replace(',','.');
-  const r = parseFloat(cleaned);
+  let s = String(v).trim();
+  // Detectar formato 1.000,00 (punto=miles, coma=decimal)
+  if (s.includes(',') && s.includes('.')) {
+    // Formato europeo/chileno: 1.234,56 → quitar puntos, cambiar coma por punto
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    // Solo coma: puede ser decimal (1,5) o miles (1,000) — si hay 3 dígitos después asumimos miles
+    const partes = s.split(',');
+    if (partes[1] && partes[1].length === 3) {
+      s = s.replace(',', ''); // era separador de miles
+    } else {
+      s = s.replace(',', '.'); // era decimal
+    }
+  } else if (s.includes('.')) {
+    // Solo punto: puede ser decimal (1.5) o miles (1.000)
+    const partes = s.split('.');
+    if (partes[1] && partes[1].length === 3 && partes.length === 2) {
+      s = s.replace('.', ''); // era separador de miles
+    }
+    // si no, lo dejamos como está (decimal normal)
+  }
+  const r = parseFloat(s);
   return isNaN(r) ? 0 : r;
 }
 
@@ -464,8 +484,12 @@ function setTab(tab) {
 
 // ── FETCH ─────────────────────────────────────────────────────────
 async function fetchSheet(name) {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(name)}`;
-  const res = await fetch(url, { headers:{ Authorization:'Bearer '+accessToken } });
+  const bust = '&_=' + Date.now();
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(name)}?majorDimension=ROWS${bust}`;
+  const res = await fetch(url, { 
+    headers:{ Authorization:'Bearer '+accessToken },
+    cache: 'no-store'
+  });
   if (!res.ok) throw new Error(`No se pudo leer "${name}" (${res.status})`);
   return (await res.json()).values || [];
 }
