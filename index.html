@@ -630,10 +630,10 @@ function renderFresco() {
     const c=r['CLIENTE'].trim();
     if(!clienteMap[c]) clienteMap[c]={procesos:0,mp:0,ess:0,exp:0,total:0};
     clienteMap[c].procesos++;
-    clienteMap[c].mp    += n(r['MATERIA PRIMA']||r['MATERIA\nPRIMA']||r['MATERIA_PRIMA']||0);
-    clienteMap[c].ess   += n(r['ESS']||r['SALDO\nESS']||r['SALDO ESS']||0);
-    clienteMap[c].exp   += n(r['EXPORTACIÓN']||r['EXPORTACION']||r['SALDO\nEXP']||r['SALDO EXP']||0);
-    clienteMap[c].total += n(r['TOTAL']||r['KG\nCLIENTE']||r['KG CLIENTE']||r['KG_CLIENTE']||0);
+    clienteMap[c].mp    += n(r['MATERIA PRIMA']||0);
+    clienteMap[c].ess   += n(r['ESS']||0);
+    clienteMap[c].exp   += n(r['EXPORTACIÓN']||r['EXPORTACION']||0);
+    clienteMap[c].total += n(r['TOTAL']||0);
   });
   const clientes = Object.entries(clienteMap).sort((a,b)=>b[1].total-a[1].total);
   const totKg=clientes.reduce((s,[,d])=>s+d.total,0);
@@ -661,7 +661,7 @@ function renderFresco() {
   const semLabels=semanas.map(s=>'Sem '+s);
   const mkRend=(key)=>semanas.map(s=>{
     const rows=DB.fresco.filter(r=>String(r['SEMANA'])===String(s));
-    const mp=rows.reduce((a,r)=>a+n(r['MATERIA PRIMA']||r['MATERIA\nPRIMA']||0),0);
+    const mp=rows.reduce((a,r)=>a+n(r['MATERIA PRIMA']||0),0);
     const kg=rows.reduce((a,r)=>a+n(r[key]||0),0);
     return mp>0?+(kg/mp*100).toFixed(1):null;
   });
@@ -670,9 +670,9 @@ function renderFresco() {
   charts['fCRendSem']=new Chart('fCRendSem',{
     type:'line',
     data:{ labels:semLabels, datasets:[
-      {label:'ESS',        data:mkRend('ESS')||mkRend('SALDO ESS'), borderColor:C.teal,   backgroundColor:'rgba(0,212,168,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
-      {label:'Exportación',data:mkRend('EXPORTACIÓN')||mkRend('EXPORTACION')||mkRend('SALDO EXP'), borderColor:C.purple, backgroundColor:'rgba(129,140,248,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
-      {label:'Total',      data:mkRend('TOTAL')||mkRend('KG CLIENTE'), borderColor:C.warn,   backgroundColor:'rgba(245,166,35,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2}
+      {label:'ESS',        data:mkRend('ESS'), borderColor:C.teal,   backgroundColor:'rgba(0,212,168,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
+      {label:'Exportación',data:mkRend('EXPORTACIÓN'), borderColor:C.purple, backgroundColor:'rgba(129,140,248,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
+      {label:'Total',      data:mkRend('TOTAL'), borderColor:C.warn,   backgroundColor:'rgba(245,166,35,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2}
     ]},
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.raw!==null?ctx.raw+'%':'S/D')}}}, scales:{ x:{grid:{color:C.grid}}, y:{grid:{color:C.grid},ticks:{color:C.txt,callback:v=>v+'%'}} } }
   });
@@ -686,7 +686,7 @@ function renderFresco() {
       label:c,
       data:semanas.map(s=>{
         const rows=DB.fresco.filter(r=>String(r['SEMANA'])===String(s)&&r['CLIENTE'].trim()===c);
-        return Math.round(rows.reduce((a,r)=>a+n(r['TOTAL']||r['KG\nCLIENTE']||r['KG CLIENTE']||0),0));
+        return Math.round(rows.reduce((a,r)=>a+n(r['TOTAL']||0),0));
       }),
       backgroundColor:PALETTE[i%PALETTE.length], borderRadius:2, borderSkipped:false
     }))},
