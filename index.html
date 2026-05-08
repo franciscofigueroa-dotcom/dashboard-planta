@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Operacional — Temporada Pez Espada 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --bg: #0e1117; --surface: #161b25; --surface2: #1e2535;
+    --border: rgba(255,255,255,0.07); --text: #e8eaf0; --text2: #7f8899; --text3: #4a5568;
+    --accent: #00d4a8; --accent2: #0099cc; --warn: #f5a623; --danger: #e84040;
+    --mono: 'DM Mono', monospace; --sans: 'DM Sans', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; min-height: 100vh; }
+
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 32px; display: flex; align-items: center; justify-content: space-between;
+    height: 60px; position: sticky; top: 0; z-index: 100;
+  }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .logo-mark {
+    width: 32px; height: 32px; background: var(--accent); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 12px; font-weight: 500; color: #0e1117;
+  }
+  .header-title { font-size: 14px; font-weight: 500; }
+  .header-sub { font-size: 11px; color: var(--text2); font-family: var(--mono); }
+
+  .user-bar { display: flex; align-items: center; gap: 12px; }
+  .user-name { font-size: 12px; color: var(--text2); font-family: var(--mono); }
+  .btn-login {
+    background: var(--accent); color: #0e1117; border: none; border-radius: 8px;
+    padding: 7px 16px; font-family: var(--sans); font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: opacity .15s;
+  }
+  .btn-login:hover { opacity: 0.85; }
+  .btn-logout {
+    background: transparent; color: var(--text3); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 14px; font-family: var(--sans); font-size: 12px;
+    cursor: pointer; transition: border-color .15s;
+  }
+  .btn-logout:hover { border-color: var(--border2); color: var(--text2); }
+  .btn-refresh {
+    background: transparent; color: var(--accent); border: 1px solid rgba(0,212,168,0.3);
+    border-radius: 8px; padding: 6px 14px; font-family: var(--mono); font-size: 11px;
+    cursor: pointer; transition: all .15s;
+  }
+  .btn-refresh:hover { background: rgba(0,212,168,0.08); }
+  .btn-refresh:disabled { opacity: 0.4; cursor: default; }
+
+  main { padding: 28px 32px; max-width: 1100px; margin: 0 auto; }
+
+  /* Login screen */
+  #loginScreen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: calc(100vh - 60px); gap: 16px; text-align: center;
+  }
+  .login-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 40px 48px; max-width: 400px; width: 100%;
+  }
+  .login-icon {
+    width: 56px; height: 56px; background: rgba(0,212,168,0.1); border: 1px solid rgba(0,212,168,0.2);
+    border-radius: 16px; display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 20px; font-size: 24px;
+  }
+  .login-title { font-size: 18px; font-weight: 500; margin-bottom: 8px; }
+  .login-sub { font-size: 13px; color: var(--text2); margin-bottom: 28px; line-height: 1.6; }
+  .btn-login-big {
+    width: 100%; background: var(--accent); color: #0e1117; border: none; border-radius: 10px;
+    padding: 12px; font-family: var(--sans); font-size: 14px; font-weight: 600;
+    cursor: pointer; transition: opacity .15s;
+  }
+  .btn-login-big:hover { opacity: 0.88; }
+  .login-note { font-size: 11px; color: var(--text3); margin-top: 14px; font-family: var(--mono); }
+
+  /* Loading */
+  #loadingScreen {
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    min-height: calc(100vh - 60px); gap: 16px;
+  }
+  .spinner {
+    width: 36px; height: 36px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 13px; color: var(--text2); font-family: var(--mono); }
+
+  /* Error */
+  #errorScreen {
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    min-height: calc(100vh - 60px); gap: 12px; text-align: center;
+  }
+  .error-card {
+    background: rgba(232,64,64,0.06); border: 1px solid rgba(232,64,64,0.2);
+    border-radius: 12px; padding: 28px 36px; max-width: 480px;
+  }
+  .error-title { color: var(--danger); font-size: 15px; font-weight: 500; margin-bottom: 8px; }
+  .error-msg { font-size: 12px; color: var(--text2); line-height: 1.6; font-family: var(--mono); }
+
+  /* Dashboard */
+  #dashboardScreen { display: none; }
+
+  .section-label {
+    font-family: var(--mono); font-size: 10px; color: var(--text3);
+    letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 12px; margin-top: 28px;
+  }
+  .last-update { font-size: 11px; color: var(--text3); font-family: var(--mono); float: right; margin-top: 2px; }
+
+  .kpi-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px; }
+  .kpi {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 22px 24px; position: relative; overflow: hidden;
+  }
+  .kpi::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0;
+    height: 2px; background: var(--kpi-color, var(--accent)); opacity: 0.7;
+  }
+  .kpi-label { font-size: 12px; color: var(--text2); margin-bottom: 10px; }
+  .kpi-value { font-family: var(--mono); font-size: 36px; font-weight: 500; line-height: 1; margin-bottom: 6px; }
+  .kpi-value span { font-size: 16px; color: var(--text2); font-weight: 400; }
+  .kpi-sub { font-size: 12px; color: var(--text3); }
+
+  .alert-row { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .alert {
+    display: flex; align-items: center; gap: 8px;
+    background: rgba(232,64,64,0.08); border: 1px solid rgba(232,64,64,0.2);
+    border-radius: 8px; padding: 8px 14px; font-size: 12px; color: #e84040;
+  }
+  .alert-warn { background: rgba(245,166,35,0.08); border-color: rgba(245,166,35,0.2); color: #f5a623; }
+  .alert-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .charts-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; }
+  .card-title { font-size: 11px; font-weight: 500; color: var(--text2); letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 18px; font-family: var(--mono); }
+  .chart-wrap { position: relative; width: 100%; }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 14px; }
+  .leg-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text2); font-family: var(--mono); }
+  .leg-sq { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+  .hg-bar-wrap { display: flex; height: 8px; border-radius: 4px; overflow: hidden; gap: 2px; margin-top: 14px; }
+  .hg-seg { border-radius: 2px; height: 100%; transition: width 0.5s; }
+
+  .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .data-table th {
+    text-align: left; font-size: 10px; font-family: var(--mono); color: var(--text3);
+    letter-spacing: 0.08em; text-transform: uppercase; padding: 8px 12px;
+    border-bottom: 1px solid var(--border); font-weight: 400;
+  }
+  .data-table td { padding: 11px 12px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: middle; }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .mono { font-family: var(--mono); }
+
+  .badge { font-size: 10px; font-weight: 500; padding: 3px 9px; border-radius: 20px; font-family: var(--mono); }
+  .b-bueno  { background: rgba(0,212,168,0.12); color: #00d4a8; border: 1px solid rgba(0,212,168,0.2); }
+  .b-regular{ background: rgba(245,166,35,0.12); color: #f5a623; border: 1px solid rgba(245,166,35,0.2); }
+  .b-malo   { background: rgba(232,64,64,0.12);  color: #e84040; border: 1px solid rgba(232,64,64,0.2); }
+  .b-nd     { background: rgba(127,136,153,0.1); color: var(--text3); border: 1px solid var(--border); }
+
+  .prog-wrap { display: flex; align-items: center; gap: 8px; }
+  .prog-bar { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 2px; }
+
+  @media (max-width: 700px) {
+    .kpi-row, .charts-2 { grid-template-columns: 1fr; }
+    main { padding: 16px; }
+    header { padding: 0 16px; }
+    .login-card { padding: 28px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo-mark">PE</div>
+    <div>
+      <div class="header-title">Dashboard Operacional</div>
+      <div class="header-sub">Temporada Pez Espada 2026</div>
+    </div>
+  </div>
+  <div class="user-bar">
+    <span class="user-name" id="userName"></span>
+    <button class="btn-refresh" id="btnRefresh" onclick="loadData()" disabled>↻ Actualizar</button>
+    <button class="btn-logout" id="btnLogout" onclick="signOut()" style="display:none">Cerrar sesión</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- LOGIN -->
+  <div id="loginScreen">
+    <div class="login-card">
+      <div class="login-icon">🐟</div>
+      <div class="login-title">Acceso restringido</div>
+      <div class="login-sub">Inicia sesión con tu cuenta Google de la empresa para ver los datos de la temporada.</div>
+      <button class="btn-login-big" onclick="signIn()">Iniciar sesión con Google</button>
+      <div class="login-note">Solo cuentas autorizadas tienen acceso</div>
+    </div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="loadingScreen">
+    <div class="spinner"></div>
+    <div class="loading-text">Cargando datos desde Google Sheets...</div>
+  </div>
+
+  <!-- ERROR -->
+  <div id="errorScreen">
+    <div class="error-card">
+      <div class="error-title">Error al cargar datos</div>
+      <div class="error-msg" id="errorMsg">No se pudo conectar con Google Sheets.</div>
+    </div>
+    <button class="btn-refresh" onclick="loadData()">↻ Reintentar</button>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboardScreen">
+
+    <div class="alert-row" id="alertRow"></div>
+
+    <div class="section-label">
+      Resumen temporada
+      <span class="last-update" id="lastUpdate"></span>
+    </div>
+    <div class="kpi-row">
+      <div class="kpi" style="--kpi-color:#00d4a8">
+        <div class="kpi-label">Kg totales ingresados</div>
+        <div class="kpi-value" id="kpiKg">—<span> kg</span></div>
+        <div class="kpi-sub" id="kpiKgSub">—</div>
+      </div>
+      <div class="kpi" style="--kpi-color:#e84040">
+        <div class="kpi-label">Rechazo Hg global</div>
+        <div class="kpi-value" id="kpiHg">—<span>%</span></div>
+        <div class="kpi-sub" id="kpiHgSub">—</div>
+      </div>
+    </div>
+
+    <div class="section-label">Control de mercurio</div>
+    <div class="charts-2">
+      <div class="card">
+        <div class="card-title">% Rechazo Hg por semana</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="cSemanaHg"></canvas></div>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-sq" style="background:#00d4a8"></div>≤ 15% normal</div>
+          <div class="leg-item"><div class="leg-sq" style="background:#f5a623"></div>15–20% atención</div>
+          <div class="leg-item"><div class="leg-sq" style="background:#e84040"></div>&gt; 20% crítico</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Distribución Hg</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="cHgDonut"></canvas></div>
+        <div class="hg-bar-wrap">
+          <div class="hg-seg" id="hgBarOk" style="background:#00d4a8"></div>
+          <div class="hg-seg" id="hgBarMid" style="background:#f5a623"></div>
+          <div class="hg-seg" id="hgBarRej" style="background:#e84040"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3);">
+          <span>0%</span><span id="hgBarLabel">—% aceptado</span><span>100%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="section-label">Ficha por lancha</div>
+    <div class="card" style="margin-bottom:32px;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Lancha</th><th>Lotes</th><th>Kg guía</th>
+            <th>Kg planta</th><th>Rendimiento</th><th>Calificación</th>
+          </tr>
+        </thead>
+        <tbody id="tbLanchas"></tbody>
+      </table>
+    </div>
+
+  </div>
+</main>
+
+<!-- Google Identity Services -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────
+const CLIENT_ID   = '964438318040-b5fj8mjss9m4p6qfsp73jm4ojj5v8sth.apps.googleusercontent.com';
+const SHEET_ID    = '152BOkWj7X_bqI2Q8BEbq3TL0lJN1R0h9bFmGtbjvHXM';
+const SCOPES      = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+
+// Nombres exactos de tus hojas en Google Sheets
+const SHEET_LANCHAS  = 'LANCHAS';
+const SHEET_DESCARGA = 'DESCARGA';
+
+const C = { accent:'#00d4a8', warn:'#f5a623', danger:'#e84040', grid:'rgba(255,255,255,0.06)', txt:'#7f8899' };
+
+let accessToken = null;
+let chartHg = null;
+let chartDonut = null;
+
+// ── AUTH ──────────────────────────────────────────────────────────
+function signIn() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: (response) => {
+      if (response.error) { showError('Error de autenticación: ' + response.error); return; }
+      accessToken = response.access_token;
+      // Obtener info del usuario
+      fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: 'Bearer ' + accessToken }
+      })
+      .then(r => r.json())
+      .then(info => {
+        document.getElementById('userName').textContent = info.email || '';
+        document.getElementById('btnLogout').style.display = 'block';
+        document.getElementById('btnRefresh').disabled = false;
+      });
+      loadData();
+    }
+  });
+  client.requestAccessToken();
+}
+
+function signOut() {
+  google.accounts.oauth2.revoke(accessToken, () => {
+    accessToken = null;
+    showScreen('login');
+    document.getElementById('userName').textContent = '';
+    document.getElementById('btnLogout').style.display = 'none';
+    document.getElementById('btnRefresh').disabled = true;
+  });
+}
+
+// ── SCREENS ───────────────────────────────────────────────────────
+function showScreen(name) {
+  document.getElementById('loginScreen').style.display    = name === 'login'     ? 'flex' : 'none';
+  document.getElementById('loadingScreen').style.display  = name === 'loading'   ? 'flex' : 'none';
+  document.getElementById('errorScreen').style.display    = name === 'error'     ? 'flex' : 'none';
+  document.getElementById('dashboardScreen').style.display= name === 'dashboard' ? 'block': 'none';
+}
+
+function showError(msg) {
+  document.getElementById('errorMsg').textContent = msg;
+  showScreen('error');
+}
+
+// ── FETCH SHEETS ──────────────────────────────────────────────────
+async function fetchSheet(sheetName) {
+  const range = encodeURIComponent(sheetName);
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${range}`;
+  const res = await fetch(url, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (!res.ok) throw new Error(`No se pudo leer la hoja "${sheetName}" (${res.status})`);
+  const data = await res.json();
+  return data.values || [];
+}
+
+function parseSheet(rows) {
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.trim());
+  return rows.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = row[i] ?? ''; });
+    return obj;
+  });
+}
+
+// ── LOAD & PROCESS ────────────────────────────────────────────────
+async function loadData() {
+  if (!accessToken) return;
+  showScreen('loading');
+  document.getElementById('btnRefresh').disabled = true;
+
+  try {
+    const [rawLanchas, rawDescarga] = await Promise.all([
+      fetchSheet(SHEET_LANCHAS),
+      fetchSheet(SHEET_DESCARGA)
+    ]);
+
+    const lanchas  = parseSheet(rawLanchas);
+    const descarga = parseSheet(rawDescarga);
+
+    processDashboard(lanchas, descarga);
+    showScreen('dashboard');
+    document.getElementById('lastUpdate').textContent =
+      'Actualizado: ' + new Date().toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' });
+
+  } catch(e) {
+    showError(e.message);
+  } finally {
+    document.getElementById('btnRefresh').disabled = false;
+  }
+}
+
+// ── PROCESS DATA ──────────────────────────────────────────────────
+function n(v) { return parseFloat(v) || 0; }
+
+function processDashboard(lanchasRaw, descargaRaw) {
+
+  // --- LANCHAS ---
+  const lanchas = lanchasRaw.filter(r => r['LANCHA'] && r['KG_GUIA'] && n(r['KG_GUIA']) > 0);
+
+  // Agrupar por lancha
+  const lanchaMap = {};
+  lanchas.forEach(r => {
+    const nombre = r['LANCHA'].trim();
+    if (!lanchaMap[nombre]) lanchaMap[nombre] = { lotes:0, kg_g:0, kg_p:0, cal:'' };
+    lanchaMap[nombre].lotes++;
+    lanchaMap[nombre].kg_g += n(r['KG_GUIA']);
+    lanchaMap[nombre].kg_p += n(r['KG  PLANTA'] || r['KG_PLANTA'] || 0);
+    if (r['CALIFICACION']) lanchaMap[nombre].cal = r['CALIFICACION'].trim();
+  });
+
+  const lanchaArr = Object.entries(lanchaMap)
+    .map(([name, d]) => ({ name, ...d, rend: d.kg_p > 0 ? (d.kg_p / d.kg_g * 100) : 0 }))
+    .sort((a,b) => b.kg_g - a.kg_g);
+
+  // KPI Kg total
+  const kgTotal = lanchaArr.reduce((s,l) => s + l.kg_g, 0);
+  const nLotes  = lanchas.length;
+  const nLanchas = lanchaArr.length;
+  document.getElementById('kpiKg').innerHTML = Math.round(kgTotal).toLocaleString('es-CL') + '<span> kg</span>';
+  document.getElementById('kpiKgSub').textContent = `${nLotes} lotes · ${nLanchas} lanchas`;
+
+  // --- DESCARGA ---
+  const desc = descargaRaw.filter(r => r['PPM Hg'] !== '');
+  const hgVals = desc.map(r => n(r['PPM Hg']));
+  const total  = hgVals.length;
+  const hgOk   = hgVals.filter(v => v < 1.0).length;
+  const hgMid  = hgVals.filter(v => v >= 1.0 && v < 1.2).length;
+  const hgRej  = hgVals.filter(v => v >= 1.2).length;
+  const rechazos = desc.filter(r => r['A/R'] === 'RECHAZO').length;
+  const rechPct = total > 0 ? (rechazos / total * 100) : 0;
+
+  document.getElementById('kpiHg').innerHTML = rechPct.toFixed(1) + '<span>%</span>';
+  document.getElementById('kpiHgSub').textContent = `${rechazos} de ${total} piezas muestreadas`;
+
+  // Hg bar
+  const okPct  = total > 0 ? (hgOk / total * 100).toFixed(1) : 0;
+  const midPct = total > 0 ? (hgMid / total * 100).toFixed(1) : 0;
+  const rejPct = total > 0 ? (hgRej / total * 100).toFixed(1) : 0;
+  document.getElementById('hgBarOk').style.width  = okPct + '%';
+  document.getElementById('hgBarMid').style.width = midPct + '%';
+  document.getElementById('hgBarRej').style.width = rejPct + '%';
+  document.getElementById('hgBarLabel').textContent = okPct + '% aceptado';
+
+  // Hg por semana — unir con lanchas por LOTE_ASOCIADO → Semana
+  const loteToSemana = {};
+  lanchas.forEach(r => {
+    const lote = r['LOTE  ASOCIADO'] || r['LOTE_ASOCIADO'] || r['LOTE'];
+    const sem  = r['Semana'] || r['SEMANA'];
+    if (lote && sem) loteToSemana[String(n(lote))] = n(sem);
+  });
+
+  const semMap = {};
+  desc.forEach(r => {
+    const lote = String(n(r['LOTE_ASOCIADO'] || r['LOTE  ASOCIADO'] || 0));
+    const sem  = loteToSemana[lote];
+    if (!sem) return;
+    if (!semMap[sem]) semMap[sem] = { total:0, rechazos:0 };
+    semMap[sem].total++;
+    if (r['A/R'] === 'RECHAZO') semMap[sem].rechazos++;
+  });
+
+  const semanas = Object.keys(semMap).map(Number).sort((a,b)=>a-b);
+  const semRechPct = semanas.map(s => semMap[s].total > 0 ? +(semMap[s].rechazos / semMap[s].total * 100).toFixed(1) : null);
+  const semLabels  = semanas.map(s => 'Sem ' + s);
+  const semColors  = semRechPct.map(v => v === null ? 'transparent' : v > 20 ? C.danger : v > 15 ? C.warn : C.accent);
+
+  // --- ALERTAS ---
+  const alertRow = document.getElementById('alertRow');
+  alertRow.innerHTML = '';
+  semanas.forEach((s, i) => {
+    const v = semRechPct[i];
+    if (v === null) return;
+    if (v > 20) alertRow.innerHTML += `<div class="alert"><span class="alert-dot"></span>Semana ${s} — Rechazo Hg ${v}% (sobre límite crítico 20%)</div>`;
+    else if (v > 15) alertRow.innerHTML += `<div class="alert-warn alert"><span class="alert-dot"></span>Semana ${s} — Rechazo Hg ${v}% (zona de atención)</div>`;
+  });
+
+  // --- CHARTS ---
+  if (chartHg) chartHg.destroy();
+  if (chartDonut) chartDonut.destroy();
+
+  Chart.defaults.font.family = "'DM Sans', sans-serif";
+  Chart.defaults.font.size = 11;
+  Chart.defaults.color = C.txt;
+
+  chartHg = new Chart('cSemanaHg', {
+    type: 'bar',
+    data: {
+      labels: semLabels,
+      datasets: [{ data: semRechPct, backgroundColor: semColors, borderRadius: 4, borderSkipped: false }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ctx.raw === null ? 'Sin datos' : ctx.raw+'%' } } },
+      scales: {
+        x: { grid:{color:C.grid} },
+        y: { grid:{color:C.grid}, ticks:{ callback: v=>v+'%' }, max: Math.max(35, ...semRechPct.filter(Boolean)) + 5 }
+      }
+    }
+  });
+
+  chartDonut = new Chart('cHgDonut', {
+    type: 'doughnut',
+    data: {
+      labels: ['< 1.0 ppm','1.0–1.2 ppm','≥ 1.2 ppm'],
+      datasets: [{ data: [hgOk, hgMid, hgRej], backgroundColor:[C.accent,C.warn,C.danger], borderWidth:0, hoverOffset:6, borderRadius:3 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: '68%',
+      plugins: {
+        legend:{display:false},
+        tooltip:{ callbacks:{ label: ctx => `${ctx.label}: ${ctx.raw} piezas (${(ctx.raw/total*100).toFixed(1)}%)` } }
+      }
+    }
+  });
+
+  // --- TABLA LANCHAS ---
+  const tbody = document.getElementById('tbLanchas');
+  tbody.innerHTML = '';
+  lanchaArr.forEach(l => {
+    const pct   = Math.max(0, Math.min(100, (l.rend - 97) / 5 * 100)).toFixed(0);
+    const color = l.rend < 99 ? C.danger : l.rend < 99.8 ? C.warn : C.accent;
+    const calCls= { 'BUENO':'b-bueno','REGULAR':'b-regular','MALO':'b-malo' }[l.cal] || 'b-nd';
+    const calTxt= l.cal || '—';
+    tbody.innerHTML += `<tr>
+      <td style="font-weight:500">${l.name}</td>
+      <td class="mono" style="color:var(--text2)">${l.lotes}</td>
+      <td class="mono">${Math.round(l.kg_g).toLocaleString('es-CL')}</td>
+      <td class="mono">${l.kg_p > 0 ? Math.round(l.kg_p).toLocaleString('es-CL') : '—'}</td>
+      <td>
+        <div class="prog-wrap">
+          <span class="mono" style="font-size:12px;min-width:48px">${l.rend > 0 ? l.rend.toFixed(1)+'%' : '—'}</span>
+          <div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:${color}"></div></div>
+        </div>
+      </td>
+      <td><span class="badge ${calCls}">${calTxt}</span></td>
+    </tr>`;
+  });
+}
+
+// ── INIT ──────────────────────────────────────────────────────────
+showScreen('login');
+</script>
+</body>
+</html>
