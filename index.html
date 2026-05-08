@@ -649,22 +649,52 @@ function renderFresco() {
   const data = getFrescoFiltered();
   if (!data.length) return;
 
+  // Helper para leer % como decimal (ej: "66,62%" → 0.6662)
+  function pct(v) {
+    if (!v) return 0;
+    const s = String(v).trim().replace('%','').replace(',','.');
+    const r = parseFloat(s);
+    return isNaN(r) ? 0 : r / 100;
+  }
+
+  // Nombres de columna reales (con salto de línea tal como vienen de Sheets)
+  // parseSheet ya hace trim() en headers pero no elimina \n — lo manejamos con ambas variantes
+  const getKgCliente = r => n(r['KG\nCLIENTE'] || r['KG CLIENTE'] || r['KG_CLIENTE'] || 0);
+  const getMP       = r => n(r['MATERIA\nPRIMA'] || r['MATERIA PRIMA'] || r['MATERIA_PRIMA'] || 0);
+  const getESSpct   = r => pct(r['ESS'] || 0);
+  const getExppct   = r => pct(r['EXPORTACIÓN'] || r['EXPORTACION'] || 0);
+  const getTotpct   = r => pct(r['TOTAL'] || 0);
+
   const clienteMap = {};
   data.forEach(r=>{
-    const c=r['CLIENTE'].trim();
-    if(!clienteMap[c]) clienteMap[c]={procesos:0,mp:0,ess:0,exp:0,total:0};
+    const c = r['CLIENTE'].trim();
+    if (!clienteMap[c]) clienteMap[c]={procesos:0, mp:0, kgEss:0, kgExp:0, kgTot:0};
     clienteMap[c].procesos++;
-    clienteMap[c].mp    += n(r['MATERIA PRIMA']||0);
-    clienteMap[c].ess   += n(r['ESS']||0);
-    clienteMap[c].exp   += n(r['EXPORTACIÓN']||r['EXPORTACION']||0);
-    clienteMap[c].total += n(r['TOTAL']||0);
+    const mp  = getMP(r);
+    const kgC = getKgCliente(r);
+    // Si TOTAL es porcentaje, calcular kg = MP × %
+    // Si TOTAL es > 1, asumir que ya es kg directamente
+    const totRaw = r['TOTAL'] || '';
+    const isTotPct = String(totRaw).includes('%');
+    clienteMap[c].mp    += mp;
+    clienteMap[c].kgEss += mp * getESSpct(r);
+    clienteMap[c].kgExp += mp * getExppct(r);
+    // Para kg total: usar KG CLIENTE si existe y es razonable, si no calcular desde %
+    if (kgC > 0) {
+      clienteMap[c].kgTot += kgC;
+    } else if (isTotPct) {
+      clienteMap[c].kgTot += mp * getTotpct(r);
+    } else {
+      clienteMap[c].kgTot += n(totRaw);
+    }
   });
-  const clientes = Object.entries(clienteMap).sort((a,b)=>b[1].total-a[1].total);
-  const totKg=clientes.reduce((s,[,d])=>s+d.total,0);
-  const totMp=clientes.reduce((s,[,d])=>s+d.mp,0);
-  const totEss=clientes.reduce((s,[,d])=>s+d.ess,0);
-  const totExp=clientes.reduce((s,[,d])=>s+d.exp,0);
-  const nProc=clientes.reduce((s,[,d])=>s+d.procesos,0);
+
+  const clientes = Object.entries(clienteMap).sort((a,b)=>b[1].kgTot-a[1].kgTot);
+  const totKg  = clientes.reduce((s,[,d])=>s+d.kgTot,0);
+  const totMp  = clientes.reduce((s,[,d])=>s+d.mp,0);
+  const totEss = clientes.reduce((s,[,d])=>s+d.kgEss,0);
+  const totExp = clientes.reduce((s,[,d])=>s+d.kgExp,0);
+  const nProc  = clientes.reduce((s,[,d])=>s+d.procesos,0);
 
   document.getElementById('fKpiKg').innerHTML=fmt(totKg)+'<span> kg</span>';
   document.getElementById('fKpiSub').textContent=`${nProc} procesos · ${clientes.length} clientes`;
@@ -676,17 +706,22 @@ function renderFresco() {
   destroyChart('fCClienteKg');
   charts['fCClienteKg']=new Chart('fCClienteKg',{
     type:'bar',
-    data:{ labels:clientes.map(([c])=>c), datasets:[{ data:clientes.map(([,d])=>Math.round(d.total)), backgroundColor:clientes.map((_,i)=>PALETTE[i%PALETTE.length]), borderRadius:4, borderSkipped:false }] },
+    data:{ labels:clientes.map(([c])=>c), datasets:[{ data:clientes.map(([,d])=>Math.round(d.kgTot)), backgroundColor:clientes.map((_,i)=>PALETTE[i%PALETTE.length]), borderRadius:4, borderSkipped:false }] },
     options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.raw.toLocaleString('es-CL')+' kg'}}}, scales:{ x:{grid:{color:C.grid},ticks:{color:C.txt,callback:v=>(v/1000).toFixed(0)+'k'}}, y:{grid:{color:'transparent'},ticks:{color:C.txt,font:{size:11}}} } }
   });
 
   // Rendimiento por semana (siempre datos globales)
   const semanas=[...new Set(DB.fresco.map(r=>r['SEMANA']).filter(Boolean))].sort((a,b)=>n(a)-n(b));
   const semLabels=semanas.map(s=>'Sem '+s);
-  const mkRend=(key)=>semanas.map(s=>{
+
+  const mkRendSem=(tipo)=>semanas.map(s=>{
     const rows=DB.fresco.filter(r=>String(r['SEMANA'])===String(s));
-    const mp=rows.reduce((a,r)=>a+n(r['MATERIA PRIMA']||0),0);
-    const kg=rows.reduce((a,r)=>a+n(r[key]||0),0);
+    const mp=rows.reduce((a,r)=>a+getMP(r),0);
+    let kg=0;
+    if(tipo==='ESS')  kg=rows.reduce((a,r)=>a+mp*getESSpct(r)/rows.length*rows.length,0);
+    if(tipo==='EXP')  kg=rows.reduce((a,r)=>a+getMP(r)*getExppct(r),0);
+    if(tipo==='TOT')  kg=rows.reduce((a,r)=>{ const kgC=getKgCliente(r); return a+(kgC>0?kgC:getMP(r)*getTotpct(r)); },0);
+    if(tipo==='ESS')  kg=rows.reduce((a,r)=>a+getMP(r)*getESSpct(r),0);
     return mp>0?+(kg/mp*100).toFixed(1):null;
   });
 
@@ -694,9 +729,9 @@ function renderFresco() {
   charts['fCRendSem']=new Chart('fCRendSem',{
     type:'line',
     data:{ labels:semLabels, datasets:[
-      {label:'ESS',        data:mkRend('ESS'), borderColor:C.teal,   backgroundColor:'rgba(0,212,168,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
-      {label:'Exportación',data:mkRend('EXPORTACIÓN'), borderColor:C.purple, backgroundColor:'rgba(129,140,248,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
-      {label:'Total',      data:mkRend('TOTAL'), borderColor:C.warn,   backgroundColor:'rgba(245,166,35,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2}
+      {label:'ESS',        data:mkRendSem('ESS'), borderColor:C.teal,   backgroundColor:'rgba(0,212,168,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
+      {label:'Exportación',data:mkRendSem('EXP'), borderColor:C.purple, backgroundColor:'rgba(129,140,248,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
+      {label:'Total',      data:mkRendSem('TOT'), borderColor:C.warn,   backgroundColor:'rgba(245,166,35,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2}
     ]},
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.raw!==null?ctx.raw+'%':'S/D')}}}, scales:{ x:{grid:{color:C.grid}}, y:{grid:{color:C.grid},ticks:{color:C.txt,callback:v=>v+'%'}} } }
   });
@@ -710,7 +745,7 @@ function renderFresco() {
       label:c,
       data:semanas.map(s=>{
         const rows=DB.fresco.filter(r=>String(r['SEMANA'])===String(s)&&r['CLIENTE'].trim()===c);
-        return Math.round(rows.reduce((a,r)=>a+n(r['TOTAL']||0),0));
+        return Math.round(rows.reduce((a,r)=>{ const kgC=getKgCliente(r); return a+(kgC>0?kgC:getMP(r)*getTotpct(r)); },0));
       }),
       backgroundColor:PALETTE[i%PALETTE.length], borderRadius:2, borderSkipped:false
     }))},
@@ -721,16 +756,16 @@ function renderFresco() {
   const tbody=document.getElementById('fTbClientes'), tfoot=document.getElementById('fTfClientes');
   tbody.innerHTML=''; tfoot.innerHTML='';
   clientes.forEach(([nm,d],i)=>{
-    const rend=d.mp>0?(d.total/d.mp*100).toFixed(1):'—';
-    const pct=d.mp>0?Math.min(100,d.total/d.mp*100).toFixed(0):0;
+    const rend=d.mp>0?(d.kgTot/d.mp*100).toFixed(1):'—';
+    const pct=d.mp>0?Math.min(100,d.kgTot/d.mp*100).toFixed(0):0;
     const col=PALETTE[i%PALETTE.length];
     tbody.innerHTML+=`<tr>
       <td style="font-weight:500"><span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block;margin-right:7px"></span>${nm}</td>
       <td class="mono" style="color:var(--text2)">${d.procesos}</td>
       <td class="mono">${fmt(d.mp)}</td>
-      <td class="mono">${fmt(d.ess)}</td>
-      <td class="mono">${fmt(d.exp)}</td>
-      <td class="mono">${fmt(d.total)}</td>
+      <td class="mono">${fmt(d.kgEss)}</td>
+      <td class="mono">${fmt(d.kgExp)}</td>
+      <td class="mono">${fmt(d.kgTot)}</td>
       <td><div class="prog-wrap"><span class="mono" style="font-size:11px;min-width:40px">${rend}${rend!=='—'?'%':''}</span><div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:${col}"></div></div></div></td>
     </tr>`;
   });
