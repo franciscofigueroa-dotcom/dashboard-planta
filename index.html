@@ -233,7 +233,7 @@ main{padding:24px 32px;max-width:1200px;margin:0 auto;}
     <div class="card" style="margin-bottom:32px;">
       <div class="card-title">Ficha por lancha</div>
       <table class="data-table">
-        <thead><tr><th>Lancha</th><th>Lotes</th><th>Kg recepcionados</th><th>Piezas</th><th>Rechazados</th><th>Sobre 1 ppm Hg</th><th>Calificación</th></tr></thead>
+        <thead><tr><th>Lancha</th><th>Lotes</th><th>Kg recepcionados</th><th>Kg 1.0–1.2 ppm</th><th>Kg &gt; 1.2 ppm</th><th>Calificación</th></tr></thead>
         <tbody id="tbLanchas"></tbody>
       </table>
     </div>
@@ -546,53 +546,54 @@ function renderHg() {
     if (lote && nm) { loteToLancha[lote]=nm; loteToSem[lote]=sem; loteToCol[lote]=cal; }
   });
 
-  // Agrupar DESCARGA por lancha (via lote)
+  // Agrupar DESCARGA por lancha — kg por rango Hg
   const lanchaMap = {};
   desc.forEach(r => {
-    const lote  = String(n(r['LOTE_ASOCIADO']||0));
-    const nm    = loteToLancha[lote] || ('Lote '+lote);
-    const sem   = loteToSem[lote]   || 0;
-    if (!lanchaMap[nm]) lanchaMap[nm] = { lotes:new Set(), kg:0, rechazos:0, sobreHg:0, total:0, sem, cal:loteToCol[lote]||'' };
+    const lote = String(n(r['LOTE_ASOCIADO']||0));
+    const nm   = loteToLancha[lote] || ('Lote '+lote);
+    if (!lanchaMap[nm]) lanchaMap[nm] = { lotes:new Set(), kgTotal:0, kgMid:0, kgAlto:0, cal:loteToCol[lote]||'' };
     lanchaMap[nm].lotes.add(lote);
-    lanchaMap[nm].kg      += n(r['PESO_PLANTA']||0);
-    lanchaMap[nm].total++;
-    if ((r['A/R']||'').trim()==='RECHAZO') lanchaMap[nm].rechazos++;
-    if (n(r['PPM Hg'])>=1.0) lanchaMap[nm].sobreHg++;
+    const kg  = n(r['PESO_PLANTA']||0);
+    const hg  = n(r['PPM Hg']||0);
+    lanchaMap[nm].kgTotal += kg;
+    if (hg >= 1.0 && hg < 1.2) lanchaMap[nm].kgMid  += kg;
+    if (hg >= 1.2)              lanchaMap[nm].kgAlto += kg;
   });
 
   const lanchaArr = Object.entries(lanchaMap)
-    .map(([nm,d])=>({nm, lotes:d.lotes.size, kg:d.kg, rechazos:d.rechazos, sobreHg:d.sobreHg, total:d.total, cal:d.cal,
-      rechPct: d.total>0?(d.rechazos/d.total*100):0,
-      hgPct:   d.total>0?(d.sobreHg/d.total*100):0
+    .map(([nm,d])=>({
+      nm, lotes:d.lotes.size, kg:d.kgTotal, kgMid:d.kgMid, kgAlto:d.kgAlto, cal:d.cal,
+      midPct:  d.kgTotal>0?(d.kgMid/d.kgTotal*100):0,
+      altoPct: d.kgTotal>0?(d.kgAlto/d.kgTotal*100):0,
     }))
     .sort((a,b)=>b.kg-a.kg);
 
   // KPIs globales
-  const totKg    = lanchaArr.reduce((s,l)=>s+l.kg,0);
-  const totPiezas= desc.length;
+  const totKg = lanchaArr.reduce((s,l)=>s+l.kg,0);
   document.getElementById('kpiKg').innerHTML = fmt(totKg)+'<span> kg</span>';
   document.getElementById('kpiKgSub').textContent = `${lanchas.length} lotes · ${lanchaArr.length} lanchas`;
 
   const hgVals  = desc.map(r=>n(r['PPM Hg']));
   const total   = hgVals.length;
-  const hgOk    = hgVals.filter(v=>v>0&&v<1.0).length;
-  const hgMid   = hgVals.filter(v=>v>=1.0&&v<1.2).length;
-  const hgRej   = hgVals.filter(v=>v>=1.2).length;
+  const totKgDesc = desc.reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
+  const kgOk    = desc.filter(r=>n(r['PPM Hg'])>0&&n(r['PPM Hg'])<1.0).reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
+  const kgMidG  = desc.filter(r=>n(r['PPM Hg'])>=1.0&&n(r['PPM Hg'])<1.2).reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
+  const kgAltG  = desc.filter(r=>n(r['PPM Hg'])>=1.2).reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
   const rechazos= desc.filter(r=>(r['A/R']||'').trim()==='RECHAZO').length;
   const rechPct = total>0?(rechazos/total*100):0;
 
   document.getElementById('kpiHg').innerHTML = rechPct.toFixed(1)+'<span>%</span>';
   document.getElementById('kpiHgSub').textContent = `${rechazos} de ${total} piezas muestreadas`;
 
-  const okPct  = total>0?(hgOk/total*100).toFixed(1):0;
-  const midPct = total>0?(hgMid/total*100).toFixed(1):0;
-  const rejPct = total>0?(hgRej/total*100).toFixed(1):0;
+  const okPct  = totKgDesc>0?(kgOk/totKgDesc*100).toFixed(1):0;
+  const midPct = totKgDesc>0?(kgMidG/totKgDesc*100).toFixed(1):0;
+  const rejPct = totKgDesc>0?(kgAltG/totKgDesc*100).toFixed(1):0;
   document.getElementById('hgBarOk').style.width  = okPct+'%';
   document.getElementById('hgBarMid').style.width = midPct+'%';
   document.getElementById('hgBarRej').style.width = rejPct+'%';
-  document.getElementById('hgBarLabel').textContent = okPct+'% aceptado';
+  document.getElementById('hgBarLabel').textContent = okPct+'% aceptado (por kg)';
 
-  // Hg por semana desde DESCARGA × loteToSem
+  // Hg por semana
   const semMap = {};
   desc.forEach(r => {
     const lote = String(n(r['LOTE_ASOCIADO']||0));
@@ -606,14 +607,8 @@ function renderHg() {
   const semRech   = semanas.map(s=>semMap[s].total>0?+(semMap[s].rechazos/semMap[s].total*100).toFixed(1):null);
   const semColors = semRech.map(v=>v===null?'transparent':v>20?C.danger:v>15?C.warn:C.teal);
 
-  // Alertas
-  const alertRow = document.getElementById('alertRow');
-  alertRow.innerHTML='';
-  semanas.forEach((s,i)=>{
-    const v=semRech[i]; if(v===null) return;
-    if(v>20) alertRow.innerHTML+=`<div class="alert"><span class="alert-dot"></span>Semana ${s} — Rechazo Hg ${v}% (crítico &gt;20%)</div>`;
-    else if(v>15) alertRow.innerHTML+=`<div class="alert alert-warn"><span class="alert-dot"></span>Semana ${s} — Rechazo Hg ${v}% (atención)</div>`;
-  });
+  // Sin alertas
+  document.getElementById('alertRow').innerHTML='';
 
   // Chart: Hg por semana
   destroyChart('cHgSemana');
@@ -623,28 +618,27 @@ function renderHg() {
     options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.raw===null?'Sin datos':ctx.raw+'%'}}}, scales:{ x:{grid:{color:C.grid}}, y:{grid:{color:C.grid},ticks:{callback:v=>v+'%'},max:35} } }
   });
 
-  // Chart: Donut Hg
+  // Chart: Donut Hg (por kg)
   destroyChart('cHgDonut');
   charts['cHgDonut'] = new Chart('cHgDonut',{
     type:'doughnut',
-    data:{ labels:['< 1.0 ppm','1.0–1.2 ppm','≥ 1.2 ppm'], datasets:[{ data:[hgOk,hgMid,hgRej], backgroundColor:[C.teal,C.warn,C.danger], borderWidth:0, hoverOffset:6, borderRadius:3 }] },
-    options:{ responsive:true, maintainAspectRatio:false, cutout:'68%', plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw} piezas (${(ctx.raw/total*100).toFixed(1)}%)`}} } }
+    data:{ labels:['< 1.0 ppm','1.0–1.2 ppm','≥ 1.2 ppm'], datasets:[{ data:[Math.round(kgOk),Math.round(kgMidG),Math.round(kgAltG)], backgroundColor:[C.teal,C.warn,C.danger], borderWidth:0, hoverOffset:6, borderRadius:3 }] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'68%', plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw.toLocaleString('es-CL')} kg (${(ctx.raw/totKgDesc*100).toFixed(1)}%)`}} } }
   });
 
-  // Tabla lanchas — ahora con datos reales de DESCARGA
+  // Tabla lanchas
   const tbody = document.getElementById('tbLanchas');
   tbody.innerHTML='';
   lanchaArr.forEach(l=>{
-    const rechCol = l.rechPct>20?C.danger:l.rechPct>15?C.warn:C.teal;
-    const hgCol   = l.hgPct>20?C.danger:l.hgPct>15?C.warn:C.teal;
+    const midCol  = l.midPct>15?C.warn:C.teal;
+    const altoCol = l.altoPct>10?C.danger:l.altoPct>5?C.warn:C.teal;
     const calCls  = {'BUENO':'color:#00d4a8','REGULAR':'color:#f5a623','MALO':'color:#e84040'}[l.cal]||'color:var(--text3)';
     tbody.innerHTML+=`<tr>
       <td style="font-weight:500">${l.nm}</td>
       <td class="mono" style="color:var(--text2)">${l.lotes}</td>
       <td class="mono">${fmt(l.kg)}</td>
-      <td class="mono">${l.total}</td>
-      <td class="mono" style="color:${rechCol}">${l.rechazos} (${l.rechPct.toFixed(1)}%)</td>
-      <td class="mono" style="color:${hgCol}">${l.sobreHg} (${l.hgPct.toFixed(1)}%)</td>
+      <td class="mono" style="color:${midCol}">${fmt(l.kgMid)} (${l.midPct.toFixed(1)}%)</td>
+      <td class="mono" style="color:${altoCol}">${fmt(l.kgAlto)} (${l.altoPct.toFixed(1)}%)</td>
       <td style="font-size:11px;font-family:var(--mono);${calCls}">${l.cal||'—'}</td>
     </tr>`;
   });
