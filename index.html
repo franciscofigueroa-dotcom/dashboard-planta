@@ -208,12 +208,10 @@ main{padding:24px 32px;max-width:1200px;margin:0 auto;}
     <div class="section-label">Control de mercurio</div>
     <div class="charts-2">
       <div class="card">
-        <div class="card-title">% Rechazo Hg por semana</div>
+        <div class="card-title">Kg recibidos por semana</div>
         <div class="chart-wrap" style="height:220px"><canvas id="cHgSemana"></canvas></div>
         <div class="legend">
-          <div class="leg-item"><div class="leg-sq" style="background:#00d4a8"></div>≤ 15% normal</div>
-          <div class="leg-item"><div class="leg-sq" style="background:#f5a623"></div>15–20% atención</div>
-          <div class="leg-item"><div class="leg-sq" style="background:#e84040"></div>&gt; 20% crítico</div>
+          <div class="leg-item"><div class="leg-sq" style="background:#0099cc"></div>Kg planta por semana</div>
         </div>
       </div>
       <div class="card">
@@ -579,11 +577,11 @@ function renderHg() {
   const kgOk    = desc.filter(r=>n(r['PPM Hg'])>0&&n(r['PPM Hg'])<1.0).reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
   const kgMidG  = desc.filter(r=>n(r['PPM Hg'])>=1.0&&n(r['PPM Hg'])<1.2).reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
   const kgAltG  = desc.filter(r=>n(r['PPM Hg'])>=1.2).reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
-  const rechazos= desc.filter(r=>(r['A/R']||'').trim()==='RECHAZO').length;
-  const rechPct = total>0?(rechazos/total*100):0;
+  const kgRechazado = desc.filter(r=>(r['A/R']||'').trim()==='RECHAZO').reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
+  const rechPct = totKgDesc>0?(kgRechazado/totKgDesc*100):0;
 
   document.getElementById('kpiHg').innerHTML = rechPct.toFixed(1)+'<span>%</span>';
-  document.getElementById('kpiHgSub').textContent = `${rechazos} de ${total} piezas muestreadas`;
+  document.getElementById('kpiHgSub').textContent = `${fmt(kgRechazado)} de ${fmt(totKgDesc)} kg muestreados`;
 
   const okPct  = totKgDesc>0?(kgOk/totKgDesc*100).toFixed(1):0;
   const midPct = totKgDesc>0?(kgMidG/totKgDesc*100).toFixed(1):0;
@@ -610,12 +608,23 @@ function renderHg() {
   // Sin alertas
   document.getElementById('alertRow').innerHTML='';
 
-  // Chart: Hg por semana
+  // Chart: Kg recibidos por semana
+  const kgSemana = semanas.map(s => {
+    return Math.round(desc.filter(r => loteToSem[String(n(r['LOTE_ASOCIADO']||0))] === s)
+      .reduce((a,r) => a + n(r['PESO_PLANTA']||0), 0));
+  });
+
   destroyChart('cHgSemana');
   charts['cHgSemana'] = new Chart('cHgSemana',{
     type:'bar',
-    data:{ labels:semanas.map(s=>'Sem '+s), datasets:[{ data:semRech, backgroundColor:semColors, borderRadius:4, borderSkipped:false }] },
-    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.raw===null?'Sin datos':ctx.raw+'%'}}}, scales:{ x:{grid:{color:C.grid}}, y:{grid:{color:C.grid},ticks:{callback:v=>v+'%'},max:35} } }
+    data:{ labels:semanas.map(s=>'Sem '+s), datasets:[{ data:kgSemana, backgroundColor:C.blue, borderRadius:4, borderSkipped:false }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>ctx.raw.toLocaleString('es-CL')+' kg'}}},
+      scales:{
+        x:{grid:{color:C.grid}, ticks:{color:C.txt}},
+        y:{grid:{color:C.grid}, ticks:{color:C.txt, callback:v=>(v/1000).toFixed(0)+'k'}}
+      }
+    }
   });
 
   // Chart: Donut Hg (por kg)
