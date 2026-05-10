@@ -688,15 +688,16 @@ function renderFresco() {
     return isNaN(r) ? 0 : r / 100;
   }
 
-  const getKgCliente = r => n(r['KG\nCLIENTE'] || r['KG CLIENTE'] || r['KG_CLIENTE'] || 0);
-  const getMP        = r => n(r['MATERIA\nPRIMA'] || r['MATERIA PRIMA'] || r['MATERIA_PRIMA'] || 0);
-  const getESSpct    = r => pct(r['ESS'] || 0);
-  const getExppct    = r => pct(r['EXPORTACIÓN'] || r['EXPORTACION'] || 0);
-  const getTotpct    = r => pct(r['TOTAL'] || 0);
+  const getKgCliente   = r => n(r['KG\nCLIENTE']    || r['KG CLIENTE']    || 0);
+  const getMP          = r => n(r['MATERIA\nPRIMA']  || r['MATERIA PRIMA']  || 0);
+  const getSaldoUsado  = r => n(r['SALDO\nUTILIZADO']|| r['SALDO UTILIZADO']|| 0);
+  const getSaldoEss    = r => n(r['SALDO\nESS']       || r['SALDO ESS']      || 0);
+  const getSaldoExp    = r => n(r['SALDO\nEXP']       || r['SALDO EXP']      || 0);
+  const getSaldoNac    = r => n(r['SALDO\nNAC']       || r['SALDO NAC']      || 0);
+  const getTotpct      = r => { const s=String(r['TOTAL']||''); return s.includes('%') ? (parseFloat(s.replace('%','').replace(',','.'))||0)/100 : 0; };
 
-  // ESS: solo ESSELUNGA
-  // Exportación: todos excepto CENCOSUD (incluye ESSELUNGA)
-  // Total: todos
+  // Kg base por fila = KG CLIENTE - SALDO UTILIZADO
+  const kgBase = r => getKgCliente(r) - getSaldoUsado(r);
 
   const clienteMap = {};
   data.forEach(r=>{
@@ -705,15 +706,12 @@ function renderFresco() {
     if (!clienteMap[c]) clienteMap[c]={procesos:0, mp:0, kgEss:0, kgExp:0, kgTot:0};
     clienteMap[c].procesos++;
     const mp  = getMP(r);
-    const kgC = getKgCliente(r);
-    const totRaw   = r['TOTAL'] || '';
-    const isTotPct = String(totRaw).includes('%');
-    const kgTot    = kgC > 0 ? kgC : (isTotPct ? mp * getTotpct(r) : n(totRaw));
-
-    clienteMap[c].mp    += mp;
-    clienteMap[c].kgTot += kgTot;
-    if (cUp.includes('ESSELUNGA'))               clienteMap[c].kgEss += mp * getESSpct(r);
-    if (!cUp.includes('CENCOSUD'))               clienteMap[c].kgExp += mp * getExppct(r);
+    const base = kgBase(r);
+    clienteMap[c].mp += mp;
+    // KG CLIENTE total para la tabla
+    clienteMap[c].kgTot += base + getSaldoEss(r) + getSaldoExp(r) + getSaldoNac(r);
+    if (cUp.includes('ESSELUNGA')) clienteMap[c].kgEss += base + getSaldoEss(r);
+    if (!cUp.includes('CENCOSUD')) clienteMap[c].kgExp += base + getSaldoEss(r) + getSaldoExp(r);
   });
 
   const clientes = Object.entries(clienteMap).sort((a,b)=>b[1].kgTot-a[1].kgTot);
@@ -721,15 +719,14 @@ function renderFresco() {
   const totMp  = clientes.reduce((s,[,d])=>s+d.mp,0);
   const nProc  = clientes.reduce((s,[,d])=>s+d.procesos,0);
 
-  // Kg ESS = solo MP de ESSELUNGA × % ESS
+  // Numeradores y denominadores correctos por segmento
   const essRows = data.filter(r=>r['CLIENTE'].trim().toUpperCase().includes('ESSELUNGA'));
   const mpEss   = essRows.reduce((a,r)=>a+getMP(r),0);
-  const kgEss   = essRows.reduce((a,r)=>a+getMP(r)*getESSpct(r),0);
+  const kgEss   = essRows.reduce((a,r)=>a+kgBase(r)+getSaldoEss(r),0);
 
-  // Kg Exp = todos excepto CENCOSUD
   const expRows = data.filter(r=>!r['CLIENTE'].trim().toUpperCase().includes('CENCOSUD'));
   const mpExp   = expRows.reduce((a,r)=>a+getMP(r),0);
-  const kgExp   = expRows.reduce((a,r)=>a+getMP(r)*getExppct(r),0);
+  const kgExp   = expRows.reduce((a,r)=>a+kgBase(r)+getSaldoEss(r)+getSaldoExp(r),0);
 
   document.getElementById('fKpiKg').innerHTML  = fmt(totKg)+'<span> kg</span>';
   document.getElementById('fKpiSub').textContent= `${nProc} procesos · ${clientes.length} clientes`;
@@ -755,11 +752,10 @@ function renderFresco() {
     rows.forEach(r=>{
       const c   = r['CLIENTE'].trim().toUpperCase();
       const mp  = getMP(r);
-      const kgC = getKgCliente(r);
-      const kgTot = kgC>0 ? kgC : getMP(r)*getTotpct(r);
-      if (tipo==='ESS' && c.includes('ESSELUNGA')) { kgNum+=mp*getESSpct(r); mpDen+=mp; }
-      if (tipo==='EXP' && !c.includes('CENCOSUD')) { kgNum+=mp*getExppct(r); mpDen+=mp; }
-      if (tipo==='TOT')                             { kgNum+=kgTot;           mpDen+=mp; }
+      const base = kgBase(r);
+      if (tipo==='ESS' && c.includes('ESSELUNGA')) { kgNum+=base+getSaldoEss(r); mpDen+=mp; }
+      if (tipo==='EXP' && !c.includes('CENCOSUD')) { kgNum+=base+getSaldoEss(r)+getSaldoExp(r); mpDen+=mp; }
+      if (tipo==='TOT')                             { kgNum+=base+getSaldoEss(r)+getSaldoExp(r)+getSaldoNac(r); mpDen+=mp; }
     });
     return mpDen>0?+(kgNum/mpDen*100).toFixed(1):null;
   });
@@ -784,7 +780,7 @@ function renderFresco() {
       label:c,
       data:semanas.map(s=>{
         const rows=DB.fresco.filter(r=>String(r['SEMANA'])===String(s)&&r['CLIENTE'].trim()===c);
-        return Math.round(rows.reduce((a,r)=>{ const kgC=getKgCliente(r); return a+(kgC>0?kgC:getMP(r)*getTotpct(r)); },0));
+        return Math.round(rows.reduce((a,r)=>a+kgBase(r)+getSaldoEss(r)+getSaldoExp(r)+getSaldoNac(r),0));
       }),
       backgroundColor:PALETTE[i%PALETTE.length], borderRadius:2, borderSkipped:false
     }))},
@@ -796,8 +792,7 @@ function renderFresco() {
   tbody.innerHTML=''; tfoot.innerHTML='';
   clientes.forEach(([nm,d],i)=>{
     const rend=d.mp>0?(d.kgTot/d.mp*100).toFixed(1):'—';
-    const pct=d.mp>0?Math.min(100,d.kgTot/d.mp*100).toFixed(0):0;
-    const col=PALETTE[i%PALETTE.length];
+    const pct=d.mp>0?Math.min(100,d.kgTot/d.mp*100).toFixed(0):0;    const col=PALETTE[i%PALETTE.length];
     tbody.innerHTML+=`<tr>
       <td style="font-weight:500"><span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block;margin-right:7px"></span>${nm}</td>
       <td class="mono" style="color:var(--text2)">${d.procesos}</td>
