@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard Operacional — Temporada Pez Espada 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root {
+  --bg:#0e1117;--surface:#161b25;--surface2:#1e2535;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.15);
+  --text:#e8eaf0;--text2:#7f8899;--text3:#4a5568;
+  --teal:#00d4a8;--blue:#0099cc;--purple:#818cf8;--warn:#f5a623;--danger:#e84040;--sky:#60a5fa;
+  --mono:'DM Mono',monospace;--sans:'DM Sans',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;min-height:100vh;}
+
+/* ── HEADER ── */
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 32px;display:flex;align-items:center;justify-content:space-between;height:60px;position:sticky;top:0;z-index:100;}
+.header-left{display:flex;align-items:center;gap:16px;}
+.logo-mark{width:32px;height:32px;background:var(--teal);border-radius:8px;display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:500;color:#0e1117;}
+.header-title{font-size:14px;font-weight:500;}
+.header-sub{font-size:11px;color:var(--text2);font-family:var(--mono);}
+.header-right{display:flex;align-items:center;gap:12px;}
+.user-name{font-size:11px;color:var(--text2);font-family:var(--mono);}
+.btn-sm{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 14px;font-family:var(--sans);font-size:12px;color:var(--text2);cursor:pointer;transition:all .15s;}
+.btn-sm:hover{border-color:var(--border2);color:var(--text);}
+.btn-sm:disabled{opacity:0.35;cursor:default;}
+.btn-refresh{color:var(--teal);border-color:rgba(0,212,168,0.25);font-family:var(--mono);font-size:11px;}
+.btn-refresh:hover{background:rgba(0,212,168,0.07);}
+
+/* ── NAV TABS ── */
+.nav-tabs{background:var(--surface);border-bottom:1px solid var(--border);padding:0 32px;display:flex;gap:4px;align-items:flex-end;height:44px;}
+.nav-tab{padding:8px 20px;font-size:12px;font-weight:500;color:var(--text3);border:none;background:transparent;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s;font-family:var(--sans);display:flex;align-items:center;gap:7px;}
+.nav-tab:hover{color:var(--text2);}
+.nav-tab.active{color:var(--text);border-bottom-color:var(--tab-color,var(--teal));}
+.nav-dot{width:7px;height:7px;border-radius:50%;background:var(--tab-color,var(--teal));flex-shrink:0;}
+
+/* ── LOGIN ── */
+#loginScreen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 104px);gap:16px;text-align:center;}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:40px 48px;max-width:400px;width:100%;}
+.login-icon{width:56px;height:56px;background:rgba(0,212,168,0.1);border:1px solid rgba(0,212,168,0.2);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:26px;}
+.login-title{font-size:18px;font-weight:500;margin-bottom:8px;}
+.login-sub{font-size:13px;color:var(--text2);margin-bottom:28px;line-height:1.6;}
+.btn-login-big{width:100%;background:var(--teal);color:#0e1117;border:none;border-radius:10px;padding:12px;font-family:var(--sans);font-size:14px;font-weight:600;cursor:pointer;transition:opacity .15s;}
+.btn-login-big:hover{opacity:0.88;}
+.login-note{font-size:11px;color:var(--text3);margin-top:14px;font-family:var(--mono);}
+
+/* ── LOADING / ERROR ── */
+#loadingScreen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 104px);gap:16px;}
+.spinner{width:36px;height:36px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{font-size:13px;color:var(--text2);font-family:var(--mono);}
+#errorScreen{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 104px);gap:12px;text-align:center;}
+.error-card{background:rgba(232,64,64,0.06);border:1px solid rgba(232,64,64,0.2);border-radius:12px;padding:28px 36px;max-width:480px;}
+.error-title{color:var(--danger);font-size:15px;font-weight:500;margin-bottom:8px;}
+.error-msg{font-size:12px;color:var(--text2);line-height:1.6;font-family:var(--mono);}
+
+/* ── MAIN ── */
+#appScreen{display:none;}
+main{padding:24px 32px;max-width:1200px;margin:0 auto;}
+
+/* Panels */
+.panel{display:none;}
+.panel.active{display:block;}
+
+/* Shared components */
+.section-label{font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:0.12em;text-transform:uppercase;margin-bottom:12px;margin-top:24px;}
+.last-update{font-size:11px;color:var(--text3);font-family:var(--mono);float:right;margin-top:2px;}
+
+.filter-row{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;}
+.filter-label{font-size:12px;color:var(--text2);font-family:var(--mono);}
+.filter-select{background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:6px 12px;cursor:pointer;outline:none;}
+
+.kpi-row-4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:4px;}
+.kpi-row-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:4px;}
+.kpi-row-3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:4px;}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden;}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--kc,var(--teal));opacity:.7;}
+.kpi-label{font-size:12px;color:var(--text2);margin-bottom:8px;}
+.kpi-value{font-family:var(--mono);font-size:26px;font-weight:500;line-height:1;margin-bottom:5px;}
+.kpi-value span{font-size:14px;color:var(--text2);font-weight:400;}
+.kpi-sub{font-size:11px;color:var(--text3);}
+
+.charts-2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;}
+.charts-3-1{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:14px;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
+.card:last-child{margin-bottom:0;}
+.card-title{font-size:10px;font-weight:500;color:var(--text2);letter-spacing:.07em;text-transform:uppercase;margin-bottom:16px;font-family:var(--mono);}
+.chart-wrap{position:relative;width:100%;}
+
+.alert-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+.alert{display:flex;align-items:center;gap:8px;background:rgba(232,64,64,0.08);border:1px solid rgba(232,64,64,0.2);border-radius:8px;padding:8px 14px;font-size:12px;color:#e84040;}
+.alert-warn{background:rgba(245,166,35,0.08);border-color:rgba(245,166,35,0.2);color:#f5a623;}
+.alert-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;animation:pulse 1.8s ease-in-out infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:12px;}
+.leg-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text2);font-family:var(--mono);}
+.leg-sq{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
+
+.hg-bar-wrap{display:flex;height:8px;border-radius:4px;overflow:hidden;gap:2px;margin-top:14px;}
+.hg-seg{border-radius:2px;height:100%;transition:width .5s;}
+
+.data-table{width:100%;border-collapse:collapse;font-size:12px;}
+.data-table th{text-align:left;font-size:10px;font-family:var(--mono);color:var(--text3);letter-spacing:.08em;text-transform:uppercase;padding:7px 10px;border-bottom:1px solid var(--border);font-weight:400;}
+.data-table td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;}
+.data-table tr:last-child td{border-bottom:none;}
+.data-table tr:hover td{background:rgba(255,255,255,0.02);}
+.data-table tfoot td{font-weight:500;border-top:1px solid var(--border2);color:var(--teal);font-family:var(--mono);font-size:12px;}
+.mono{font-family:var(--mono);}
+.prog-wrap{display:flex;align-items:center;gap:8px;}
+.prog-bar{flex:1;height:4px;background:var(--surface2);border-radius:2px;overflow:hidden;}
+.prog-fill{height:100%;border-radius:2px;}
+
+@media(max-width:800px){
+  .kpi-row-4,.kpi-row-3{grid-template-columns:1fr 1fr;}
+  .kpi-row-2,.charts-2,.charts-3-1{grid-template-columns:1fr;}
+  main{padding:16px;}
+  header,.nav-tabs{padding:0 16px;}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo-mark">PE</div>
+    <div>
+      <div class="header-title">Dashboard Operacional</div>
+      <div class="header-sub">Temporada Pez Espada 2026</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="user-name" id="userName"></span>
+    <button class="btn-sm btn-refresh" id="btnRefresh" onclick="loadData()" disabled>↻ Actualizar</button>
+    <button class="btn-sm" id="btnLogout" onclick="signOut()" style="display:none">Cerrar sesión</button>
+  </div>
+</header>
+
+<div class="nav-tabs" id="navTabs" style="display:none">
+  <button class="nav-tab active" onclick="setTab('hg')" style="--tab-color:#e84040">
+    <span class="nav-dot" style="background:#e84040"></span>Control Hg
+  </button>
+  <button class="nav-tab" onclick="setTab('fresco')" style="--tab-color:#0099cc">
+    <span class="nav-dot" style="background:#0099cc"></span>Fresco
+  </button>
+  <button class="nav-tab" onclick="setTab('congelado')" style="--tab-color:#818cf8">
+    <span class="nav-dot" style="background:#818cf8"></span>Congelado
+  </button>
+</div>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-icon">🐟</div>
+    <div class="login-title">Acceso restringido</div>
+    <div class="login-sub">Inicia sesión con tu cuenta Google de la empresa para ver los datos de la temporada.</div>
+    <button class="btn-login-big" onclick="signIn()">Iniciar sesión con Google</button>
+    <div class="login-note">Solo cuentas autorizadas tienen acceso</div>
+  </div>
+</div>
+
+<!-- LOADING -->
+<div id="loadingScreen">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loadingText">Cargando datos desde Google Sheets...</div>
+</div>
+
+<!-- ERROR -->
+<div id="errorScreen">
+  <div class="error-card">
+    <div class="error-title">Error al cargar datos</div>
+    <div class="error-msg" id="errorMsg"></div>
+  </div>
+  <button class="btn-sm btn-refresh" onclick="loadData()">↻ Reintentar</button>
+</div>
+
+<!-- APP -->
+<div id="appScreen">
+<main>
+
+  <!-- ══════════ PANEL HG ══════════ -->
+  <div class="panel active" id="panel-hg">
+
+    <div class="section-label">
+      Resumen temporada
+      <span class="last-update" id="luHg"></span>
+    </div>
+
+    <div class="alert-row" id="alertRow"></div>
+
+    <div class="kpi-row-2">
+      <div class="kpi" style="--kc:#00d4a8">
+        <div class="kpi-label">Kg totales ingresados</div>
+        <div class="kpi-value" id="kpiKg">—<span> kg</span></div>
+        <div class="kpi-sub" id="kpiKgSub">—</div>
+      </div>
+      <div class="kpi" style="--kc:#e84040">
+        <div class="kpi-label">Rechazo Hg global</div>
+        <div class="kpi-value" id="kpiHg">—<span>%</span></div>
+        <div class="kpi-sub" id="kpiHgSub">—</div>
+      </div>
+    </div>
+
+    <div class="section-label">Control de mercurio</div>
+    <div class="charts-2">
+      <div class="card">
+        <div class="card-title">Kg recibidos por semana</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="cHgSemana"></canvas></div>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-sq" style="background:#0099cc"></div>Kg planta por semana</div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">Distribución Hg</div>
+        <div class="chart-wrap" style="height:220px"><canvas id="cHgDonut"></canvas></div>
+        <div class="hg-bar-wrap">
+          <div class="hg-seg" id="hgBarOk" style="background:#00d4a8"></div>
+          <div class="hg-seg" id="hgBarMid" style="background:#f5a623"></div>
+          <div class="hg-seg" id="hgBarRej" style="background:#e84040"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;font-family:var(--mono);color:var(--text3)">
+          <span>0%</span><span id="hgBarLabel">—</span><span>100%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:32px;">
+      <div class="card-title">Ficha por lancha</div>
+      <table class="data-table">
+        <thead><tr><th>Lancha</th><th>Lotes</th><th>Kg recepcionados</th><th>Kg 1.0–1.2 ppm</th><th>Kg &gt; 1.2 ppm</th><th>Calificación</th></tr></thead>
+        <tbody id="tbLanchas"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════ PANEL FRESCO ══════════ -->
+  <div class="panel" id="panel-fresco">
+
+    <div class="section-label">
+      Producción Fresco
+      <span class="last-update" id="luFresco"></span>
+    </div>
+
+    <div class="filter-row">
+      <span class="filter-label">Semana:</span>
+      <select class="filter-select" id="filtroFrescoSem" onchange="renderFresco()"><option value="todas">Todas</option></select>
+      <span class="filter-label" style="margin-left:8px">Cliente:</span>
+      <select class="filter-select" id="filtroFrescoCliente" onchange="renderFresco()"><option value="todos">Todos</option></select>
+    </div>
+
+    <div class="kpi-row-4">
+      <div class="kpi" style="--kc:#0099cc">
+        <div class="kpi-label">Kg totales fresco</div>
+        <div class="kpi-value" id="fKpiKg">—<span> kg</span></div>
+        <div class="kpi-sub" id="fKpiSub">—</div>
+      </div>
+      <div class="kpi" style="--kc:#00d4a8">
+        <div class="kpi-label">Rendimiento ESS</div>
+        <div class="kpi-value" id="fKpiESS">—<span>%</span></div>
+        <div class="kpi-sub">Kg ESS / Materia prima</div>
+      </div>
+      <div class="kpi" style="--kc:#818cf8">
+        <div class="kpi-label">Rend. Exportación</div>
+        <div class="kpi-value" id="fKpiExp">—<span>%</span></div>
+        <div class="kpi-sub">Kg Exp / Materia prima</div>
+      </div>
+      <div class="kpi" style="--kc:#f5a623">
+        <div class="kpi-label">Rendimiento Total</div>
+        <div class="kpi-value" id="fKpiTot">—<span>%</span></div>
+        <div class="kpi-sub">Kg Total / Materia prima</div>
+      </div>
+    </div>
+
+    <div class="charts-2" style="margin-top:16px;">
+      <div class="card">
+        <div class="card-title">Kg por cliente</div>
+        <div class="chart-wrap" style="height:250px"><canvas id="fCClienteKg"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Rendimiento ESS / Exp / Total por semana</div>
+        <div class="chart-wrap" style="height:250px"><canvas id="fCRendSem"></canvas></div>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-sq" style="background:#00d4a8"></div>ESS</div>
+          <div class="leg-item"><div class="leg-sq" style="background:#818cf8"></div>Exportación</div>
+          <div class="leg-item"><div class="leg-sq" style="background:#f5a623"></div>Total</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Kg por cliente por semana</div>
+      <div class="chart-wrap" style="height:240px"><canvas id="fCClienteSem"></canvas></div>
+    </div>
+
+    <div class="card" style="margin-bottom:32px;">
+      <div class="card-title">Detalle por cliente</div>
+      <table class="data-table">
+        <thead><tr><th>Cliente</th><th>Proc.</th><th>Materia Prima</th><th>Kg ESS</th><th>Kg Exp</th><th>Kg Total</th><th>Rend.</th></tr></thead>
+        <tbody id="fTbClientes"></tbody>
+        <tfoot id="fTfClientes"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════ PANEL CONGELADO ══════════ -->
+  <div class="panel" id="panel-congelado">
+
+    <div class="section-label">
+      Producción Congelado
+      <span class="last-update" id="luCong"></span>
+    </div>
+
+    <div class="filter-row">
+      <span class="filter-label">Semana:</span>
+      <select class="filter-select" id="filtroCongSem" onchange="renderCongelado()"><option value="todas">Todas</option></select>
+      <span class="filter-label" style="margin-left:8px">Producto:</span>
+      <select class="filter-select" id="filtroCongProd" onchange="renderCongelado()"><option value="todos">Todos</option></select>
+    </div>
+
+    <div class="kpi-row-3">
+      <div class="kpi" style="--kc:#60a5fa">
+        <div class="kpi-label">Kg totales congelado</div>
+        <div class="kpi-value" id="cKpiKg">—<span> kg</span></div>
+        <div class="kpi-sub" id="cKpiSub">—</div>
+      </div>
+      <div class="kpi" style="--kc:#00d4a8">
+        <div class="kpi-label">Rendimiento RD prom.</div>
+        <div class="kpi-value" id="cKpiRend">—<span>%</span></div>
+        <div class="kpi-sub">Promedio de procesos</div>
+      </div>
+      <div class="kpi" style="--kc:#818cf8">
+        <div class="kpi-label">Productos distintos</div>
+        <div class="kpi-value" id="cKpiProd">—</div>
+        <div class="kpi-sub" id="cKpiProdSub">—</div>
+      </div>
+    </div>
+
+    <div class="charts-2" style="margin-top:16px;">
+      <div class="card">
+        <div class="card-title">Kg por producto</div>
+        <div class="chart-wrap" style="height:260px"><canvas id="cCProdKg"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Kg por semana por producto</div>
+        <div class="chart-wrap" style="height:260px"><canvas id="cCSemKg"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Rendimiento (RD) por semana</div>
+      <div class="chart-wrap" style="height:190px"><canvas id="cCRendSem"></canvas></div>
+    </div>
+
+    <div class="card" style="margin-bottom:32px;">
+      <div class="card-title">Detalle por producto</div>
+      <table class="data-table">
+        <thead><tr><th>Producto</th><th>Procesos</th><th>Kg total</th><th>RD prom.</th><th>% del total</th></tr></thead>
+        <tbody id="cTbProd"></tbody>
+        <tfoot id="cTfProd"></tfoot>
+      </table>
+    </div>
+  </div>
+
+</main>
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────
+const CLIENT_ID = '964438318040-b5fj8mjss9m4p6qfsp73jm4ojj5v8sth.apps.googleusercontent.com';
+const SHEET_ID  = '152BOkWj7X_bqI2Q8BEbq3TL0lJN1R0h9bFmGtbjvHXM';
+const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly';
+
+const C = { teal:'#00d4a8', blue:'#0099cc', purple:'#818cf8', sky:'#60a5fa', warn:'#f5a623', danger:'#e84040', grid:'rgba(255,255,255,0.06)', txt:'#7f8899' };
+const PALETTE = ['#0099cc','#00d4a8','#818cf8','#f5a623','#e84040','#f472b6','#34d399','#60a5fa','#fb923c','#a78bfa'];
+
+let accessToken = null;
+let DB = { lanchas:[], descarga:[], fresco:[], congelado:[] };
+let charts = {};
+let currentTab = 'hg';
+
+// ── UTILS ─────────────────────────────────────────────────────────
+function n(v) {
+  if (v === null || v === undefined || v === '') return 0;
+  let s = String(v).trim();
+  // Detectar formato 1.000,00 (punto=miles, coma=decimal)
+  if (s.includes(',') && s.includes('.')) {
+    // Formato europeo/chileno: 1.234,56 → quitar puntos, cambiar coma por punto
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    // Solo coma: puede ser decimal (1,5) o miles (1,000) — si hay 3 dígitos después asumimos miles
+    const partes = s.split(',');
+    if (partes[1] && partes[1].length === 3) {
+      s = s.replace(',', ''); // era separador de miles
+    } else {
+      s = s.replace(',', '.'); // era decimal
+    }
+  } else if (s.includes('.')) {
+    // Solo punto: puede ser decimal (1.5) o miles (1.000)
+    const partes = s.split('.');
+    if (partes[1] && partes[1].length === 3 && partes.length === 2) {
+      s = s.replace('.', ''); // era separador de miles
+    }
+    // si no, lo dejamos como está (decimal normal)
+  }
+  const r = parseFloat(s);
+  return isNaN(r) ? 0 : r;
+}
+
+function fmt(v) { return Math.round(v).toLocaleString('es-CL'); }
+
+function parseSheet(rows) {
+  if (!rows.length) return [];
+  const headers = rows[0].map(h => h.trim().replace(/\n/g,' '));
+  return rows.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h,i) => { obj[h] = row[i] ?? ''; });
+    return obj;
+  });
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+Chart.defaults.font.family = "'DM Sans', sans-serif";
+Chart.defaults.font.size = 11;
+Chart.defaults.color = C.txt;
+
+// ── AUTH ──────────────────────────────────────────────────────────
+function signIn() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID, scope: SCOPES,
+    callback: async (resp) => {
+      if (resp.error) { showError('Error de autenticación: ' + resp.error); return; }
+      accessToken = resp.access_token;
+      const info = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers:{ Authorization:'Bearer '+accessToken } }).then(r=>r.json());
+      document.getElementById('userName').textContent = info.email || '';
+      document.getElementById('btnLogout').style.display = 'block';
+      document.getElementById('btnRefresh').disabled = false;
+      loadData();
+    }
+  });
+  client.requestAccessToken();
+}
+
+function signOut() {
+  google.accounts.oauth2.revoke(accessToken, () => {
+    accessToken = null;
+    document.getElementById('navTabs').style.display = 'none';
+    document.getElementById('userName').textContent = '';
+    document.getElementById('btnLogout').style.display = 'none';
+    document.getElementById('btnRefresh').disabled = true;
+    showScreen('login');
+  });
+}
+
+// ── SCREENS ───────────────────────────────────────────────────────
+function showScreen(name) {
+  ['login','loading','error','app'].forEach(s => {
+    const el = document.getElementById(s+'Screen');
+    el.style.display = s === name ? (s === 'app' ? 'block' : 'flex') : 'none';
+  });
+  document.getElementById('navTabs').style.display = name === 'app' ? 'flex' : 'none';
+}
+
+function showError(msg) {
+  document.getElementById('errorMsg').textContent = msg;
+  showScreen('error');
+}
+
+// ── TAB NAV ───────────────────────────────────────────────────────
+function setTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-'+tab).classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ── FETCH ─────────────────────────────────────────────────────────
+async function fetchSheet(name) {
+  const bust = '&_=' + Date.now();
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values/${encodeURIComponent(name)}?majorDimension=ROWS${bust}`;
+  const res = await fetch(url, { 
+    headers:{ Authorization:'Bearer '+accessToken },
+    cache: 'no-store'
+  });
+  if (!res.ok) throw new Error(`No se pudo leer "${name}" (${res.status})`);
+  return (await res.json()).values || [];
+}
+
+async function loadData() {
+  if (!accessToken) return;
+  showScreen('loading');
+  document.getElementById('btnRefresh').disabled = true;
+  try {
+    document.getElementById('loadingText').textContent = 'Cargando LANCHAS y DESCARGA...';
+    const [rL, rD, rF, rC] = await Promise.all([
+      fetchSheet('LANCHAS'), fetchSheet('DESCARGA'),
+      fetchSheet('FRESCO'),  fetchSheet('CONGELADO')
+    ]);
+    DB.lanchas   = parseSheet(rL).filter(r => r['LANCHA'] && n(r['KG_GUIA']) > 0);
+    DB.descarga  = parseSheet(rD).filter(r => r['PPM Hg'] !== '');
+    DB.fresco    = parseSheet(rF).filter(r => r['CLIENTE'] && r['CLIENTE'].trim());
+    DB.congelado = parseSheet(rC).filter(r => r['PRODUCTO'] && r['PRODUCTO'].trim() && n(r['KG']) > 0);
+
+    const now = new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+    ['luHg','luFresco','luCong'].forEach(id => { document.getElementById(id).textContent = 'Actualizado: '+now; });
+
+    populateFiltrosFresco();
+    populateFiltrosCongelado();
+    renderHg();
+    renderFresco();
+    renderCongelado();
+    showScreen('app');
+  } catch(e) {
+    showError(e.message);
+  } finally {
+    document.getElementById('btnRefresh').disabled = false;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// PANEL HG
+// ════════════════════════════════════════════════════════════════
+function renderHg() {
+  const lanchas = DB.lanchas;
+  const desc    = DB.descarga;
+
+  // Mapa lote → lancha (desde hoja LANCHAS)
+  const loteToLancha = {};
+  const loteToSem    = {};
+  const loteToCol    = {}; // calificacion
+  lanchas.forEach(r => {
+    const lote = String(n(r['LOTE'] || r['LOTE_ASOCIADO'] || r['LOTE  ASOCIADO'] || 0));
+    const nm   = (r['LANCHA']||'').trim();
+    const sem  = n(r['Semana']||r['SEMANA']||0);
+    const cal  = (r['CALIFICACION']||'').trim();
+    if (lote && nm) { loteToLancha[lote]=nm; loteToSem[lote]=sem; loteToCol[lote]=cal; }
+  });
+
+  // Agrupar DESCARGA por lancha — kg por rango Hg
+  const lanchaMap = {};
+  desc.forEach(r => {
+    const lote = String(n(r['LOTE_ASOCIADO']||0));
+    const nm   = loteToLancha[lote] || ('Lote '+lote);
+    if (!lanchaMap[nm]) lanchaMap[nm] = { lotes:new Set(), kgTotal:0, kgMid:0, kgAlto:0, cal:loteToCol[lote]||'' };
+    lanchaMap[nm].lotes.add(lote);
+    const kg  = n(r['PESO_PLANTA']||0);
+    const hg  = n(r['PPM Hg']||0);
+    lanchaMap[nm].kgTotal += kg;
+    if (hg >= 1.0 && hg < 1.2) lanchaMap[nm].kgMid  += kg;
+    if (hg >= 1.2)              lanchaMap[nm].kgAlto += kg;
+  });
+
+  const lanchaArr = Object.entries(lanchaMap)
+    .map(([nm,d])=>({
+      nm, lotes:d.lotes.size, kg:d.kgTotal, kgMid:d.kgMid, kgAlto:d.kgAlto, cal:d.cal,
+      midPct:  d.kgTotal>0?(d.kgMid/d.kgTotal*100):0,
+      altoPct: d.kgTotal>0?(d.kgAlto/d.kgTotal*100):0,
+    }))
+    .sort((a,b)=>b.kg-a.kg);
+
+  // KPIs globales
+  const totKg = lanchaArr.reduce((s,l)=>s+l.kg,0);
+  document.getElementById('kpiKg').innerHTML = fmt(totKg)+'<span> kg</span>';
+  document.getElementById('kpiKgSub').textContent = `${lanchas.length} lotes · ${lanchaArr.length} lanchas`;
+
+  const hgVals  = desc.map(r=>n(r['PPM Hg']));
+  const total   = hgVals.length;
+  const totKgDesc = desc.reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
+  const kgOk    = desc.filter(r=>n(r['PPM Hg'])>0&&n(r['PPM Hg'])<1.0).reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
+  const kgMidG  = desc.filter(r=>n(r['PPM Hg'])>=1.0&&n(r['PPM Hg'])<1.2).reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
+  const kgAltG  = desc.filter(r=>n(r['PPM Hg'])>=1.2).reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
+  const kgRechazado = desc.filter(r=>(r['A/R']||'').trim()==='RECHAZO').reduce((s,r)=>s+n(r['PESO_PLANTA']||0),0);
+  const rechPct = totKgDesc>0?(kgRechazado/totKgDesc*100):0;
+
+  document.getElementById('kpiHg').innerHTML = rechPct.toFixed(1)+'<span>%</span>';
+  document.getElementById('kpiHgSub').textContent = `${fmt(kgRechazado)} de ${fmt(totKgDesc)} kg muestreados`;
+
+  const okPct  = totKgDesc>0?(kgOk/totKgDesc*100).toFixed(1):0;
+  const midPct = totKgDesc>0?(kgMidG/totKgDesc*100).toFixed(1):0;
+  const rejPct = totKgDesc>0?(kgAltG/totKgDesc*100).toFixed(1):0;
+  document.getElementById('hgBarOk').style.width  = okPct+'%';
+  document.getElementById('hgBarMid').style.width = midPct+'%';
+  document.getElementById('hgBarRej').style.width = rejPct+'%';
+  document.getElementById('hgBarLabel').textContent = okPct+'% aceptado (por kg)';
+
+  // Hg por semana
+  const semMap = {};
+  desc.forEach(r => {
+    const lote = String(n(r['LOTE_ASOCIADO']||0));
+    const sem  = loteToSem[lote];
+    if (!sem) return;
+    if (!semMap[sem]) semMap[sem]={total:0, rechazos:0};
+    semMap[sem].total++;
+    if ((r['A/R']||'').trim()==='RECHAZO') semMap[sem].rechazos++;
+  });
+  const semanas   = Object.keys(semMap).map(Number).sort((a,b)=>a-b);
+  const semRech   = semanas.map(s=>semMap[s].total>0?+(semMap[s].rechazos/semMap[s].total*100).toFixed(1):null);
+  const semColors = semRech.map(v=>v===null?'transparent':v>20?C.danger:v>15?C.warn:C.teal);
+
+  // Sin alertas
+  document.getElementById('alertRow').innerHTML='';
+
+  // Chart: Kg recibidos por semana
+  const kgSemana = semanas.map(s => {
+    return Math.round(desc.filter(r => loteToSem[String(n(r['LOTE_ASOCIADO']||0))] === s)
+      .reduce((a,r) => a + n(r['PESO_PLANTA']||0), 0));
+  });
+
+  destroyChart('cHgSemana');
+  charts['cHgSemana'] = new Chart('cHgSemana',{
+    type:'bar',
+    data:{ labels:semanas.map(s=>'Sem '+s), datasets:[{ data:kgSemana, backgroundColor:C.blue, borderRadius:4, borderSkipped:false }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>ctx.raw.toLocaleString('es-CL')+' kg'}}},
+      scales:{
+        x:{grid:{color:C.grid}, ticks:{color:C.txt}},
+        y:{grid:{color:C.grid}, ticks:{color:C.txt, callback:v=>(v/1000).toFixed(0)+'k'}}
+      }
+    }
+  });
+
+  // Chart: Donut Hg (por kg)
+  destroyChart('cHgDonut');
+  charts['cHgDonut'] = new Chart('cHgDonut',{
+    type:'doughnut',
+    data:{ labels:['< 1.0 ppm','1.0–1.2 ppm','≥ 1.2 ppm'], datasets:[{ data:[Math.round(kgOk),Math.round(kgMidG),Math.round(kgAltG)], backgroundColor:[C.teal,C.warn,C.danger], borderWidth:0, hoverOffset:6, borderRadius:3 }] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'68%', plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.raw.toLocaleString('es-CL')} kg (${(ctx.raw/totKgDesc*100).toFixed(1)}%)`}} } }
+  });
+
+  // Tabla lanchas
+  const tbody = document.getElementById('tbLanchas');
+  tbody.innerHTML='';
+  lanchaArr.forEach(l=>{
+    const midCol  = l.midPct>15?C.warn:C.teal;
+    const altoCol = l.altoPct>10?C.danger:l.altoPct>5?C.warn:C.teal;
+    const calCls  = {'BUENO':'color:#00d4a8','REGULAR':'color:#f5a623','MALO':'color:#e84040'}[l.cal]||'color:var(--text3)';
+    tbody.innerHTML+=`<tr>
+      <td style="font-weight:500">${l.nm}</td>
+      <td class="mono" style="color:var(--text2)">${l.lotes}</td>
+      <td class="mono">${fmt(l.kg)}</td>
+      <td class="mono" style="color:${midCol}">${fmt(l.kgMid)} (${l.midPct.toFixed(1)}%)</td>
+      <td class="mono" style="color:${altoCol}">${fmt(l.kgAlto)} (${l.altoPct.toFixed(1)}%)</td>
+      <td style="font-size:11px;font-family:var(--mono);${calCls}">${l.cal||'—'}</td>
+    </tr>`;
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// PANEL FRESCO
+// ════════════════════════════════════════════════════════════════
+function populateFiltrosFresco() {
+  const semanas  = [...new Set(DB.fresco.map(r=>r['SEMANA']).filter(Boolean))].sort((a,b)=>n(a)-n(b));
+  const clientes = [...new Set(DB.fresco.map(r=>r['CLIENTE'].trim()).filter(Boolean))].sort();
+  const selS = document.getElementById('filtroFrescoSem');
+  selS.innerHTML = '<option value="todas">Todas las semanas</option>';
+  semanas.forEach(s=>{ selS.innerHTML+=`<option value="${s}">Semana ${s}</option>`; });
+  const selC = document.getElementById('filtroFrescoCliente');
+  selC.innerHTML = '<option value="todos">Todos los clientes</option>';
+  clientes.forEach(c=>{ selC.innerHTML+=`<option value="${c}">${c}</option>`; });
+}
+
+function getFrescoFiltered() {
+  const sem = document.getElementById('filtroFrescoSem').value;
+  const cli = document.getElementById('filtroFrescoCliente').value;
+  return DB.fresco.filter(r =>
+    (sem==='todas' || String(r['SEMANA'])===String(sem)) &&
+    (cli==='todos' || r['CLIENTE'].trim()===cli)
+  );
+}
+
+function renderFresco() {
+  const data = getFrescoFiltered();
+  if (!data.length) return;
+
+  // Leer % como decimal — "66,62%" → 0.6662
+  function pct(v) {
+    if (!v) return 0;
+    const s = String(v).trim().replace('%','').replace(',','.');
+    const r = parseFloat(s);
+    return isNaN(r) ? 0 : r / 100;
+  }
+
+  const getKgCliente = r => n(r['KG\nCLIENTE'] || r['KG CLIENTE'] || r['KG_CLIENTE'] || 0);
+  const getMP        = r => n(r['MATERIA\nPRIMA'] || r['MATERIA PRIMA'] || r['MATERIA_PRIMA'] || 0);
+  const getESSpct    = r => pct(r['ESS'] || 0);
+  const getExppct    = r => pct(r['EXPORTACIÓN'] || r['EXPORTACION'] || 0);
+  const getTotpct    = r => pct(r['TOTAL'] || 0);
+
+  // ESS: solo ESSELUNGA
+  // Exportación: todos excepto CENCOSUD (incluye ESSELUNGA)
+  // Total: todos
+
+  const clienteMap = {};
+  data.forEach(r=>{
+    const c   = r['CLIENTE'].trim();
+    const cUp = c.toUpperCase();
+    if (!clienteMap[c]) clienteMap[c]={procesos:0, mp:0, kgEss:0, kgExp:0, kgTot:0};
+    clienteMap[c].procesos++;
+    const mp  = getMP(r);
+    const kgC = getKgCliente(r);
+    const totRaw   = r['TOTAL'] || '';
+    const isTotPct = String(totRaw).includes('%');
+    const kgTot    = kgC > 0 ? kgC : (isTotPct ? mp * getTotpct(r) : n(totRaw));
+
+    clienteMap[c].mp    += mp;
+    clienteMap[c].kgTot += kgTot;
+    if (cUp.includes('ESSELUNGA'))               clienteMap[c].kgEss += mp * getESSpct(r);
+    if (!cUp.includes('CENCOSUD'))               clienteMap[c].kgExp += mp * getExppct(r);
+  });
+
+  const clientes = Object.entries(clienteMap).sort((a,b)=>b[1].kgTot-a[1].kgTot);
+  const totKg  = clientes.reduce((s,[,d])=>s+d.kgTot,0);
+  const totMp  = clientes.reduce((s,[,d])=>s+d.mp,0);
+  const nProc  = clientes.reduce((s,[,d])=>s+d.procesos,0);
+
+  // Kg ESS = solo MP de ESSELUNGA × % ESS
+  const essRows = data.filter(r=>r['CLIENTE'].trim().toUpperCase().includes('ESSELUNGA'));
+  const mpEss   = essRows.reduce((a,r)=>a+getMP(r),0);
+  const kgEss   = essRows.reduce((a,r)=>a+getMP(r)*getESSpct(r),0);
+
+  // Kg Exp = todos excepto CENCOSUD
+  const expRows = data.filter(r=>!r['CLIENTE'].trim().toUpperCase().includes('CENCOSUD'));
+  const mpExp   = expRows.reduce((a,r)=>a+getMP(r),0);
+  const kgExp   = expRows.reduce((a,r)=>a+getMP(r)*getExppct(r),0);
+
+  document.getElementById('fKpiKg').innerHTML  = fmt(totKg)+'<span> kg</span>';
+  document.getElementById('fKpiSub').textContent= `${nProc} procesos · ${clientes.length} clientes`;
+  document.getElementById('fKpiESS').innerHTML  = (mpEss>0?(kgEss/mpEss*100).toFixed(1):'—')+'<span>%</span>';
+  document.getElementById('fKpiExp').innerHTML  = (mpExp>0?(kgExp/mpExp*100).toFixed(1):'—')+'<span>%</span>';
+  document.getElementById('fKpiTot').innerHTML  = (totMp>0?(totKg/totMp*100).toFixed(1):'—')+'<span>%</span>';
+
+  // Chart: Kg por cliente
+  destroyChart('fCClienteKg');
+  charts['fCClienteKg']=new Chart('fCClienteKg',{
+    type:'bar',
+    data:{ labels:clientes.map(([c])=>c), datasets:[{ data:clientes.map(([,d])=>Math.round(d.kgTot)), backgroundColor:clientes.map((_,i)=>PALETTE[i%PALETTE.length]), borderRadius:4, borderSkipped:false }] },
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.raw.toLocaleString('es-CL')+' kg'}}}, scales:{ x:{grid:{color:C.grid},ticks:{color:C.txt,callback:v=>(v/1000).toFixed(0)+'k'}}, y:{grid:{color:'transparent'},ticks:{color:C.txt,font:{size:11}}} } }
+  });
+
+  // Rendimiento por semana — siempre sobre datos globales (no filtrado por cliente)
+  const semanas=[...new Set(DB.fresco.map(r=>r['SEMANA']).filter(Boolean))].sort((a,b)=>n(a)-n(b));
+  const semLabels=semanas.map(s=>'Sem '+s);
+
+  const mkRendSem=(tipo)=>semanas.map(s=>{
+    const rows = DB.fresco.filter(r=>String(r['SEMANA'])===String(s));
+    let kgNum=0, mpDen=0;
+    rows.forEach(r=>{
+      const c   = r['CLIENTE'].trim().toUpperCase();
+      const mp  = getMP(r);
+      const kgC = getKgCliente(r);
+      const kgTot = kgC>0 ? kgC : getMP(r)*getTotpct(r);
+      if (tipo==='ESS' && c.includes('ESSELUNGA')) { kgNum+=mp*getESSpct(r); mpDen+=mp; }
+      if (tipo==='EXP' && !c.includes('CENCOSUD')) { kgNum+=mp*getExppct(r); mpDen+=mp; }
+      if (tipo==='TOT')                             { kgNum+=kgTot;           mpDen+=mp; }
+    });
+    return mpDen>0?+(kgNum/mpDen*100).toFixed(1):null;
+  });
+
+  destroyChart('fCRendSem');
+  charts['fCRendSem']=new Chart('fCRendSem',{
+    type:'line',
+    data:{ labels:semLabels, datasets:[
+      {label:'ESS',        data:mkRendSem('ESS'), borderColor:C.teal,   backgroundColor:'rgba(0,212,168,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
+      {label:'Exportación',data:mkRendSem('EXP'), borderColor:C.purple, backgroundColor:'rgba(129,140,248,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2},
+      {label:'Total',      data:mkRendSem('TOT'), borderColor:C.warn,   backgroundColor:'rgba(245,166,35,0.07)', fill:false, tension:0.3, pointRadius:4, pointBorderColor:'#161b25', pointBorderWidth:2}
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+(ctx.raw!==null?ctx.raw+'%':'S/D')}}}, scales:{ x:{grid:{color:C.grid}}, y:{grid:{color:C.grid},ticks:{color:C.txt,callback:v=>v+'%'}} } }
+  });
+
+  // Chart: Kg por cliente por semana
+  const cNames=clientes.map(([c])=>c);
+  destroyChart('fCClienteSem');
+  charts['fCClienteSem']=new Chart('fCClienteSem',{
+    type:'bar',
+    data:{ labels:semLabels, datasets:cNames.map((c,i)=>({
+      label:c,
+      data:semanas.map(s=>{
+        const rows=DB.fresco.filter(r=>String(r['SEMANA'])===String(s)&&r['CLIENTE'].trim()===c);
+        return Math.round(rows.reduce((a,r)=>{ const kgC=getKgCliente(r); return a+(kgC>0?kgC:getMP(r)*getTotpct(r)); },0));
+      }),
+      backgroundColor:PALETTE[i%PALETTE.length], borderRadius:2, borderSkipped:false
+    }))},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:true,position:'bottom',labels:{color:C.txt,font:{size:10},boxWidth:10,padding:10}}, tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.raw.toLocaleString('es-CL')+' kg'}} }, scales:{ x:{stacked:true,grid:{color:C.grid}}, y:{stacked:true,grid:{color:C.grid},ticks:{color:C.txt,callback:v=>(v/1000).toFixed(0)+'k'}} } }
+  });
+
+  // Tabla
+  const tbody=document.getElementById('fTbClientes'), tfoot=document.getElementById('fTfClientes');
+  tbody.innerHTML=''; tfoot.innerHTML='';
+  clientes.forEach(([nm,d],i)=>{
+    const rend=d.mp>0?(d.kgTot/d.mp*100).toFixed(1):'—';
+    const pct=d.mp>0?Math.min(100,d.kgTot/d.mp*100).toFixed(0):0;
+    const col=PALETTE[i%PALETTE.length];
+    tbody.innerHTML+=`<tr>
+      <td style="font-weight:500"><span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block;margin-right:7px"></span>${nm}</td>
+      <td class="mono" style="color:var(--text2)">${d.procesos}</td>
+      <td class="mono">${fmt(d.mp)}</td>
+      <td class="mono">${fmt(d.kgEss)}</td>
+      <td class="mono">${fmt(d.kgExp)}</td>
+      <td class="mono">${fmt(d.kgTot)}</td>
+      <td><div class="prog-wrap"><span class="mono" style="font-size:11px;min-width:40px">${rend}${rend!=='—'?'%':''}</span><div class="prog-bar"><div class="prog-fill" style="width:${pct}%;background:${col}"></div></div></div></td>
+    </tr>`;
+  });
+  const rG=totMp>0?(totKg/totMp*100).toFixed(1):'—';
+  tfoot.innerHTML=`<tr><td>Total</td><td class="mono">${nProc}</td><td class="mono">${fmt(totMp)}</td><td class="mono">${fmt(kgEss)}</td><td class="mono">${fmt(kgExp)}</td><td class="mono">${fmt(totKg)}</td><td class="mono">${rG}${rG!=='—'?'%':''}</td></tr>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// PANEL CONGELADO
+// ════════════════════════════════════════════════════════════════
+function populateFiltrosCongelado() {
+  const semanas=[...new Set(DB.congelado.map(r=>r['SEMANA']).filter(Boolean))].sort((a,b)=>n(a)-n(b));
+  const productos=[...new Set(DB.congelado.map(r=>r['PRODUCTO'].trim()).filter(Boolean))].sort();
+  const selS=document.getElementById('filtroCongSem');
+  selS.innerHTML='<option value="todas">Todas las semanas</option>';
+  semanas.forEach(s=>{ selS.innerHTML+=`<option value="${s}">Semana ${s}</option>`; });
+  const selP=document.getElementById('filtroCongProd');
+  selP.innerHTML='<option value="todos">Todos los productos</option>';
+  productos.forEach(p=>{ selP.innerHTML+=`<option value="${p}">${p}</option>`; });
+}
+
+function getCongFiltered() {
+  const sem=document.getElementById('filtroCongSem').value;
+  const prod=document.getElementById('filtroCongProd').value;
+  return DB.congelado.filter(r=>(sem==='todas'||String(r['SEMANA'])===String(sem))&&(prod==='todos'||r['PRODUCTO'].trim()===prod));
+}
+
+function renderCongelado() {
+  const data=getCongFiltered();
+  if (!data.length) return;
+  const prodMap={};
+  data.forEach(r=>{
+    const p=r['PRODUCTO'].trim();
+    if(!prodMap[p]) prodMap[p]={procesos:0,kg:0,rdSum:0,rdCount:0};
+    prodMap[p].procesos++;
+    prodMap[p].kg+=n(r['KG']);
+    const rd=n(r['RD']);
+    if(rd>0){prodMap[p].rdSum+=rd;prodMap[p].rdCount++;}
+  });
+  const productos=Object.entries(prodMap).sort((a,b)=>b[1].kg-a[1].kg);
+  const totKg=productos.reduce((s,[,d])=>s+d.kg,0);
+  const totProc=productos.reduce((s,[,d])=>s+d.procesos,0);
+  const rdAll=data.map(r=>n(r['RD'])).filter(v=>v>0);
+  const rdProm=rdAll.length>0?(rdAll.reduce((a,b)=>a+b,0)/rdAll.length*100).toFixed(1):'—';
+
+  document.getElementById('cKpiKg').innerHTML=fmt(totKg)+'<span> kg</span>';
+  document.getElementById('cKpiSub').textContent=`${totProc} procesos`;
+  document.getElementById('cKpiRend').innerHTML=rdProm+(rdProm!=='—'?'<span>%</span>':'');
+  document.getElementById('cKpiProd').textContent=productos.length;
+  document.getElementById('cKpiProdSub').textContent=productos.map(([p])=>p).slice(0,3).join(', ')+(productos.length>3?'...':'');
+
+  // Chart: Dona por producto
+  destroyChart('cCProdKg');
+  charts['cCProdKg']=new Chart('cCProdKg',{
+    type:'doughnut',
+    data:{ labels:productos.map(([p])=>p), datasets:[{ data:productos.map(([,d])=>Math.round(d.kg)), backgroundColor:productos.map((_,i)=>PALETTE[i%PALETTE.length]), borderWidth:0, hoverOffset:6, borderRadius:3 }] },
+    options:{ responsive:true, maintainAspectRatio:false, cutout:'60%', plugins:{ legend:{display:true,position:'right',labels:{color:C.txt,font:{size:11},boxWidth:10,padding:10}}, tooltip:{callbacks:{label:ctx=>ctx.label+': '+ctx.raw.toLocaleString('es-CL')+' kg ('+((ctx.raw/totKg)*100).toFixed(1)+'%)'}} } }
+  });
+
+  // Chart: Stacked por semana
+  const semanas=[...new Set(DB.congelado.map(r=>r['SEMANA']).filter(Boolean))].sort((a,b)=>n(a)-n(b));
+  const semLabels=semanas.map(s=>'Sem '+s);
+  destroyChart('cCSemKg');
+  charts['cCSemKg']=new Chart('cCSemKg',{
+    type:'bar',
+    data:{ labels:semLabels, datasets:productos.map(([p],i)=>({
+      label:p,
+      data:semanas.map(s=>{
+        const rows=DB.congelado.filter(r=>String(r['SEMANA'])===String(s)&&r['PRODUCTO'].trim()===p);
+        return Math.round(rows.reduce((a,r)=>a+n(r['KG']),0));
+      }),
+      backgroundColor:PALETTE[i%PALETTE.length], borderRadius:2, borderSkipped:false
+    }))},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:true,position:'bottom',labels:{color:C.txt,font:{size:10},boxWidth:10,padding:10}}, tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.raw.toLocaleString('es-CL')+' kg'}} }, scales:{ x:{stacked:true,grid:{color:C.grid}}, y:{stacked:true,grid:{color:C.grid},ticks:{color:C.txt,callback:v=>(v/1000).toFixed(0)+'k'}} } }
+  });
+
+  // Chart: Rendimiento RD por semana
+  const rendSem=semanas.map(s=>{
+    const rows=DB.congelado.filter(r=>String(r['SEMANA'])===String(s));
+    const rds=rows.map(r=>n(r['RD'])).filter(v=>v>0);
+    return rds.length>0?+(rds.reduce((a,b)=>a+b,0)/rds.length*100).toFixed(1):null;
+  });
+  destroyChart('cCRendSem');
+  charts['cCRendSem']=new Chart('cCRendSem',{
+    type:'line',
+    data:{ labels:semLabels, datasets:[{ data:rendSem, borderColor:C.teal, backgroundColor:'rgba(0,212,168,0.08)', fill:true, tension:0.3, pointRadius:5, pointBackgroundColor:C.teal, pointBorderColor:'#161b25', pointBorderWidth:2 }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.raw!==null?ctx.raw+'%':'S/D'}}}, scales:{ x:{grid:{color:C.grid}}, y:{grid:{color:C.grid},ticks:{color:C.txt,callback:v=>v+'%'}} } }
+  });
+
+  // Tabla
+  const tbody=document.getElementById('cTbProd'), tfoot=document.getElementById('cTfProd');
+  tbody.innerHTML=''; tfoot.innerHTML='';
+  productos.forEach(([nm,d],i)=>{
+    const rd=d.rdCount>0?(d.rdSum/d.rdCount*100).toFixed(1):'—';
+    const pct=totKg>0?(d.kg/totKg*100).toFixed(1):'—';
+    const pBar=totKg>0?(d.kg/totKg*100).toFixed(0):0;
+    const col=PALETTE[i%PALETTE.length];
+    tbody.innerHTML+=`<tr>
+      <td style="font-weight:500"><span style="width:7px;height:7px;border-radius:50%;background:${col};display:inline-block;margin-right:7px"></span>${nm}</td>
+      <td class="mono" style="color:var(--text2)">${d.procesos}</td>
+      <td class="mono">${fmt(d.kg)}</td>
+      <td class="mono">${rd}${rd!=='—'?'%':''}</td>
+      <td><div class="prog-wrap"><span class="mono" style="font-size:11px;min-width:40px">${pct}${pct!=='—'?'%':''}</span><div class="prog-bar"><div class="prog-fill" style="width:${pBar}%;background:${col}"></div></div></div></td>
+    </tr>`;
+  });
+  tfoot.innerHTML=`<tr><td>Total</td><td class="mono">${totProc}</td><td class="mono">${fmt(totKg)}</td><td class="mono">${rdProm}${rdProm!=='—'?'%':''}</td><td class="mono">100%</td></tr>`;
+}
+
+// ── INIT ──────────────────────────────────────────────────────────
+showScreen('login');
+</script>
+</body>
+</html>
